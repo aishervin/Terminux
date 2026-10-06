@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101410">
+  <title>Terminux · ترمینال هوشمند Termux</title>
+  <style>
+    :root{color-scheme:dark;--bg:#101410;--panel:#171d18;--panel2:#1d251f;--line:#303a31;--text:#eef4e9;--muted:#9aa796;--lime:#bcf277;--orange:#ffb36b;--red:#ff817b;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% -25%,#35422b 0,transparent 50%),var(--bg);color:var(--text);font-family:Tahoma,"Noto Sans Arabic",sans-serif;min-height:100vh}
+    button,input,textarea{font:inherit}button{cursor:pointer}.shell{min-height:100vh;display:grid;grid-template-rows:auto 1fr auto;max-width:1120px;margin:auto;padding:0 26px}
+    header{height:74px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #ffffff12}.brand{display:flex;align-items:center;gap:12px;font-weight:700;letter-spacing:.01em}.brand-mark{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:var(--lime);color:#182015;font:700 19px var(--mono)}.brand small{display:block;color:var(--muted);font-weight:400;font-size:11px;margin-top:3px}.head-actions{display:flex;gap:8px}.icon-btn{width:39px;height:39px;border:1px solid var(--line);border-radius:12px;background:#ffffff08;color:var(--text);font-size:18px}.icon-btn:hover,.suggestion:hover{border-color:#7e9a68;background:#ffffff10}
+    main{width:min(100%,800px);margin:0 auto;display:flex;flex-direction:column;padding:42px 0 28px}.intro{padding:22px 0 27px}.eyebrow{color:var(--lime);font:12px var(--mono);direction:ltr;text-align:right;letter-spacing:.07em}.intro h1{font-size:clamp(25px,4vw,38px);line-height:1.45;margin:12px 0 9px;letter-spacing:-.04em}.intro p{color:var(--muted);line-height:1.9;margin:0;max-width:660px;font-size:14px}.statusline{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);margin-top:17px}.dot{width:7px;height:7px;border-radius:50%;background:#68d391;box-shadow:0 0 10px #68d39180}.dot.busy{background:var(--orange);box-shadow:0 0 10px #ffb36b80}
+    #feed{display:flex;flex-direction:column;gap:14px;padding:3px 0 22px}.empty{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:5px 0 10px}.suggestion{text-align:right;min-height:98px;padding:15px;border:1px solid var(--line);border-radius:14px;background:#ffffff05;color:var(--text);line-height:1.7;font-size:13px}.suggestion span{display:block;color:var(--lime);font:11px var(--mono);margin-bottom:8px;direction:ltr;text-align:right}.message{border:1px solid var(--line);border-radius:15px;padding:15px 17px;background:var(--panel);line-height:1.85;white-space:pre-wrap;overflow-wrap:anywhere}.message.user{background:#20291f;border-color:#526244}.message.assistant{background:#171d18}.message-label{font:10px var(--mono);color:var(--muted);margin-bottom:7px;direction:ltr;text-align:right}.message.error{border-color:#81433e;color:#ffd0cb}.notice{color:var(--orange);padding:5px 4px;font-size:12px}.command-card{border:1px solid #69543a;border-radius:14px;background:#211e18;overflow:hidden}.command-head{padding:12px 15px;color:var(--orange);font-size:12px;border-bottom:1px solid #ffffff12}.command-code{margin:0;padding:15px;color:#f4eadc;font:13px/1.7 var(--mono);direction:ltr;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto}.command-actions{display:flex;gap:8px;padding:10px 13px;border-top:1px solid #ffffff12}.action{border:1px solid var(--line);border-radius:9px;padding:8px 14px;color:var(--text);background:#ffffff09;font-size:12px}.action.primary{background:var(--lime);border-color:var(--lime);color:#172014;font-weight:700}.action.reject{color:#ffb4ad}.tool-output{background:#0d120e;border:1px solid #263128;border-radius:13px;overflow:hidden}.tool-output summary{cursor:pointer;padding:10px 14px;color:#a9c397;font-size:12px}.tool-output pre{margin:0;padding:12px 14px;border-top:1px solid #ffffff10;color:#ccd6c8;font:12px/1.65 var(--mono);direction:ltr;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;max-height:350px;overflow:auto}.composer{position:sticky;bottom:0;padding:12px 0 20px;background:linear-gradient(transparent,var(--bg) 15%)}.composebox{border:1px solid #485544;border-radius:17px;background:#1b211c;padding:10px;box-shadow:0 15px 50px #0005}.composebox:focus-within{border-color:#90b66c}.composebox textarea{display:block;width:100%;min-height:58px;max-height:180px;resize:vertical;border:0;outline:0;background:transparent;color:var(--text);padding:8px 8px 4px;line-height:1.8}.composebox textarea::placeholder{color:#84907e}.compose-bottom{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 5px 1px}.hint{font-size:10px;color:var(--muted)}.send{border:0;border-radius:10px;background:var(--lime);color:#182015;font-weight:700;padding:10px 17px}.send:disabled{opacity:.45;cursor:wait}.bottom-controls{display:flex;align-items:center;gap:8px}.auto-label{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:6px}.auto-label input{accent-color:var(--orange)}footer{border-top:1px solid #ffffff10;padding:13px 0 17px;display:flex;justify-content:space-between;color:#778173;font-size:10px}.local-badge{color:#b8d69e;direction:ltr;font-family:var(--mono)}dialog{width:min(460px,calc(100% - 28px));border:1px solid #394239;border-radius:18px;background:#171d18;color:var(--text);padding:0;box-shadow:0 20px 80px #0009}dialog::backdrop{background:#060806bb;backdrop-filter:blur(5px)}.dialog-inner{padding:22px}.dialog-inner h2{margin:0 0 7px;font-size:19px}.dialog-inner p{color:var(--muted);font-size:12px;line-height:1.8}.field{display:block;margin:17px 0}.field label{display:block;font-size:12px;margin-bottom:8px}.field input{width:100%;border:1px solid var(--line);border-radius:10px;background:#0f140f;color:var(--text);padding:12px;direction:ltr;text-align:left}.dialog-actions{display:flex;justify-content:space-between;align-items:center;margin-top:20px}.key-link{color:var(--lime);font-size:11px}.spinner{display:inline-block;width:12px;height:12px;border:2px solid #18201555;border-top-color:#182015;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-left:6px}@keyframes spin{to{transform:rotate(360deg)}}
+    @media(max-width:640px){.shell{padding:0 15px}header{height:64px}main{padding:24px 0 12px}.intro{padding:14px 0 18px}.intro p{font-size:13px}.empty{grid-template-columns:1fr}.suggestion{min-height:auto}.suggestion:nth-child(n+2){display:none}.hint{display:none}.composebox textarea{min-height:52px}.auto-label{font-size:9px}footer{font-size:9px}}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="brand"><div class="brand-mark">&gt;_</div><div>Terminux<small>ایجنت هوشمند · ترمینال محلی Termux</small></div></div>
+      <div class="head-actions"><button class="icon-btn" id="newChat" title="گفتگوی تازه" aria-label="گفتگوی تازه">＋</button><button class="icon-btn" id="openSettings" title="تنظیمات" aria-label="تنظیمات">⚙</button></div>
+    </header>
+    <main>
+      <section class="intro" id="intro">
+        <div class="eyebrow">ON-DEVICE TOOL AGENT / TERMUX</div>
+        <h1>ترمینال گوشی،<br>با یک همکار هوشمند.</h1>
+        <p>درخواستت را بنویس. ایجنت برای اجرای فرمان از Termux استفاده می‌کند و نتیجه را می‌خواند تا قدم بعدی را انتخاب کند. در حالت عادی، پیش از هر فرمان از تو تأیید می‌گیرد.</p>
+        <div class="statusline"><span class="dot" id="statusDot"></span><span id="statusText">در حال اتصال به ایجنت محلی…</span></div>
+      </section>
+      <section id="feed" aria-live="polite">
+        <div class="empty" id="suggestions">
+          <button class="suggestion" data-prompt="زبان و تنظیمات محیط Termux من را بررسی کن و بگو چطور فارسی را بهتر فعال کنم."><span>01 / INSPECT</span>محیط Termux را بررسی کن</button>
+          <button class="suggestion" data-prompt="بررسی کن Python روی Termux نصب است یا نه؛ اگر نصب نیست روش نصبش را پیشنهاد بده."><span>02 / CHECK</span>یک ابزار را بررسی کن</button>
+          <button class="suggestion" data-prompt="فایل‌های پوشه خانه Termux را فهرست کن و ساختارشان را خلاصه کن."><span>03 / EXPLORE</span>فایل‌های پوشه خانه را ببین</button>
+        </div>
+      </section>
+      <section class="composer">
+        <form class="composebox" id="chatForm">
+          <textarea id="prompt" rows="2" placeholder="به ایجنت بگو در Termux چه کاری انجام دهد…" aria-label="پیام به ایجنت"></textarea>
+          <div class="compose-bottom">
+            <div class="bottom-controls"><label class="auto-label" title="فرمان‌های درخواستی مدل بدون تأیید دستی اجرا شوند"><input type="checkbox" id="autoApprove"> اجرای خودکار فرمان‌ها</label><span class="hint">Enter برای ارسال · Shift+Enter برای خط جدید</span></div>
+            <button class="send" id="sendButton" type="submit">ارسال</button>
+          </div>
+        </form>
+      </section>
+    </main>
+    <footer><span>کلید API و تاریخچه روی همین گوشی می‌مانند.</span><span class="local-badge">LOCALHOST ONLY</span></footer>
+  </div>
+  <dialog id="settingsDialog">
+    <form class="dialog-inner" id="settingsForm">
+      <h2>اتصال به Gemini</h2>
+      <p>کلید API در فایل تنظیمات خصوصی Termux ذخیره می‌شود و از مرورگر فقط به ایجنت محلی فرستاده می‌شود. درخواست‌های مدل مستقیماً به Google Gemini API می‌روند.</p>
+      <div class="field"><label for="apiKey">Gemini API key</label><input id="apiKey" type="password" autocomplete="off" placeholder="AIza…"></div>
+      <div class="field"><label for="model">نام مدل</label><input id="model" value="gemini-2.5-flash" spellcheck="false"></div>
+      <div class="dialog-actions"><a class="key-link" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">دریافت API key ↗</a><div><button class="action" type="button" id="cancelSettings">بستن</button> <button class="action primary" type="submit">ذخیره</button></div></div>
+    </form>
+  </dialog>
+  <script>
+    const feed = document.querySelector('#feed');
+    const promptBox = document.querySelector('#prompt');
+    const sendButton = document.querySelector('#sendButton');
+    const settingsDialog = document.querySelector('#settingsDialog');
+    let lastEventId = 0;
+    let isRunning = false;
+    let pending = null;
+
+    async function api(path, body) {
+      const response = await fetch(path, body ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)} : {});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      return data;
+    }
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    }
+    function appendMessage(type, text, label) {
+      document.querySelector('#suggestions')?.remove();
+      const card = el('article', `message ${type}`);
+      card.append(el('div','message-label',label));
+      card.append(el('div','',text));
+      feed.append(card);
+      card.scrollIntoView({behavior:'smooth',block:'nearest'});
+    }
+    function appendCommand(command, id) {
+      document.querySelector('#suggestions')?.remove();
+      const card = el('article','command-card');
+      card.append(el('div','command-head','درخواست اجرای فرمان · تأیید تو لازم است'));
+      card.append(el('pre','command-code',command));
+      const actions = el('div','command-actions');
+      const approve = el('button','action primary','اجرا کن');
+      const reject = el('button','action reject','رد کن');
+      approve.onclick = () => decide(id,true,approve,reject);
+      reject.onclick = () => decide(id,false,approve,reject);
+      actions.append(approve,reject);
+      card.append(actions);
+      feed.append(card);
+      card.scrollIntoView({behavior:'smooth',block:'nearest'});
+    }
+    async function decide(id, approved, ...buttons) {
+      buttons.forEach(button => button.disabled = true);
+      try { await api('/api/approval',{id,approved}); }
+      catch (error) { appendMessage('error',error.message,'LOCAL AGENT'); buttons.forEach(button => button.disabled = false); }
+    }
+    function appendOutput(event) {
+      const details = el('details','tool-output');
+      details.open = true;
+      const status = event.exit_code === 0 ? 'فرمان تمام شد · کد خروج ۰' : `فرمان تمام شد · کد خروج ${event.exit_code}`;
+      details.append(el('summary','',status));
+      details.append(el('pre','',event.output || '(بدون خروجی)'));
+      feed.append(details);
+    }
+    function renderEvent(event) {
+      lastEventId = Math.max(lastEventId,event.id);
+      if (event.type === 'user') appendMessage('user',event.text,'YOU');
+      if (event.type === 'assistant') appendMessage('assistant',event.text,'GEMINI');
+      if (event.type === 'error') appendMessage('error',event.text,'AGENT ERROR');
+      if (event.type === 'notice') feed.append(el('div','notice',event.text));
+      if (event.type === 'command_pending') { pending = {id:event.approval_id,command:event.command}; appendCommand(event.command,event.approval_id); }
+      if (event.type === 'command_running') feed.append(el('div','notice',`در حال اجرا: ${event.command}`));
+      if (event.type === 'command_result') appendOutput(event);
+      if (event.type === 'status') setRunning(event.running);
+    }
+    function setRunning(value) {
+      isRunning = value;
+      sendButton.disabled = value;
+      sendButton.innerHTML = value ? '<span class="spinner"></span>در حال کار' : 'ارسال';
+      document.querySelector('#statusDot').classList.toggle('busy',value);
+      document.querySelector('#statusText').textContent = value ? 'ایجنت در حال فکر کردن یا اجرای فرمان است' : 'ایجنت محلی آماده است';
+    }
+    async function poll() {
+      try {
+        const state = await api(`/api/state?after=${lastEventId}`);
+        state.events.forEach(renderEvent);
+        setRunning(state.running);
+        document.querySelector('#autoApprove').checked = state.autoApprove;
+        if (!state.configured && !settingsDialog.open) settingsDialog.showModal();
+        if (pending && state.pending === null) pending = null;
+      } catch (_) {
+        document.querySelector('#statusText').textContent = 'اتصال محلی قطع است؛ Termux را بررسی کن';
+        document.querySelector('#statusDot').classList.add('busy');
+      }
+    }
+    async function sendPrompt(text) {
+      if (isRunning || !text.trim()) return;
+      try { await api('/api/chat',{message:text.trim()}); promptBox.value=''; promptBox.focus(); }
+      catch (error) { appendMessage('error',error.message,'LOCAL AGENT'); }
+    }
+    document.querySelector('#chatForm').addEventListener('submit',event => {event.preventDefault();sendPrompt(promptBox.value);});
+    promptBox.addEventListener('keydown',event => {if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();document.querySelector('#chatForm').requestSubmit();}});
+    document.querySelectorAll('.suggestion').forEach(button => button.addEventListener('click',()=>{promptBox.value=button.dataset.prompt;promptBox.focus();}));
+    document.querySelector('#openSettings').onclick = () => settingsDialog.showModal();
+    document.querySelector('#cancelSettings').onclick = () => settingsDialog.close();
+    document.querySelector('#settingsForm').addEventListener('submit',async event=>{
+      event.preventDefault();
+      const submit=event.submitter;submit.disabled=true;
+      try{await api('/api/config',{apiKey:document.querySelector('#apiKey').value,model:document.querySelector('#model').value});document.querySelector('#apiKey').value='';settingsDialog.close();appendMessage('assistant','تنظیمات ذخیره شد. حالا می‌توانی کار را شروع کنی.','LOCAL AGENT');}
+      catch(error){alert(error.message);}finally{submit.disabled=false;}
+    });
+    document.querySelector('#autoApprove').addEventListener('change',async event=>{
+      try{await api('/api/auto-approve',{enabled:event.target.checked});}
+      catch(error){event.target.checked=false;alert(error.message);}
+    });
+    document.querySelector('#newChat').onclick=async()=>{
+      if(isRunning)return;
+      try{await api('/api/clear',{});feed.replaceChildren();lastEventId=0;feed.innerHTML='';window.location.reload();}
+      catch(error){appendMessage('error',error.message,'LOCAL AGENT');}
+    };
+    poll();
+    setInterval(poll,700);
+  </script>
+</body>
+</html>
