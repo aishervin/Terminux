@@ -16,7 +16,7 @@ fi
 printf '%s\n' "۱/۳ نصب Python و ابزارهای لازم..."
 pkg install -y python curl tar termux-tools
 
-printf '%s\n' "۲/۳ دریافت Termux Shell Agent از GitHub..."
+printf '%s\n' "۲/۳ دریافت Terminux از GitHub..."
 ARCHIVE_URL="https://codeload.github.com/${REPOSITORY}/tar.gz/refs/heads/${BRANCH}"
 curl -fsSL "$ARCHIVE_URL" -o "$TEMP_DIR/source.tar.gz"
 tar -xzf "$TEMP_DIR/source.tar.gz" -C "$TEMP_DIR"
@@ -25,4 +25,5 @@ cp -R "$TEMP_DIR/Terminux-${BRANCH}/." "$APP_DIR/"
 
 printf '%s\n' "۳/۳ راه‌اندازی ایجنت محلی..."
 printf '%s\n' "صفحهٔ چت در مرورگر باز می‌شود. برای توقف، در Termux کلید Ctrl+C را بزن."
+rm -rf "$TEMP_DIR"
 exec python "$APP_DIR/app.py" --open-browser
