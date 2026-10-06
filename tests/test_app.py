@@ -152,6 +152,36 @@ class AgentCoreTests(unittest.TestCase):
             self.assertNotIn("SECRET=hidden", json.dumps(tree_request))
             self.assertNotIn("SECRET=also-hidden", json.dumps(tree_request))
 
+    def test_publish_updates_existing_branch_without_force_push(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "main.py").write_text("print('updated')", encoding="utf-8")
+            calls = []
+
+            def fake_api(_provider, method, path, body=None):
+                calls.append((method, path, body))
+                if method == "GET" and path == "/repos/alice/demo":
+                    return {"success": True, "data": {"default_branch": "main"}}
+                if method == "GET" and path.endswith("/git/ref/heads/main"):
+                    return {"success": True, "data": {"object": {"sha": "old-commit"}}}
+                if method == "GET" and path.endswith("/git/commits/old-commit"):
+                    return {"success": True, "data": {"tree": {"sha": "old-tree"}}}
+                if method == "POST" and path.endswith("/git/trees"):
+                    return {"success": True, "data": {"sha": "new-tree"}}
+                if method == "POST" and path.endswith("/git/commits"):
+                    return {"success": True, "data": {"sha": "new-commit", "html_url": "https://github.com/alice/demo/commit/new-commit"}}
+                if method == "PATCH" and path.endswith("/git/refs/heads/main"):
+                    return {"success": True, "data": {}}
+                self.fail(f"Unexpected API request: {method} {path}")
+
+            with patch.object(app, "WORKSPACE_DIR", root), patch.object(app, "provider_api", side_effect=fake_api):
+                result = app.github_publish_workspace({"owner": "alice", "repo": "demo", "message": "Update"})
+
+            self.assertTrue(result["success"])
+            update = next(call for call in calls if call[0] == "PATCH")
+            self.assertFalse(update[2]["force"])
+            self.assertEqual(update[2]["sha"], "new-commit")
+
 
 if __name__ == "__main__":
     unittest.main()
