@@ -1,13 +1,40 @@
+import base64
 import json
 import os
 import tempfile
 import threading
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import app
+
+
+@contextmanager
+def local_server(workspace):
+    with patch.object(app, "WORKSPACE_DIR", workspace):
+        server = app.LocalServer(("127.0.0.1", 0), app.Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            yield f"http://127.0.0.1:{server.server_address[1]}"
+        finally:
+            server.shutdown()
+            server.server_close()
+
+
+def http_request(url, path, body=None):
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    request = Request(url + path, data=data, headers={"Content-Type": "application/json"}, method="POST" if data is not None else "GET")
+    try:
+        response = urlopen(request)
+    except HTTPError as error:
+        return error.code, error.headers, error.read()
+    with response:
+        return response.status, response.headers, response.read()
 
 
 class AgentCoreTests(unittest.TestCase):
@@ -54,6 +81,139 @@ class AgentCoreTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     app.workspace_path("../outside.txt")
 
+    def test_upload_sanitizes_names_uses_private_random_paths_and_enforces_size(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            payload = base64.b64encode(b"hello").decode("ascii")
+            with patch.object(app, "WORKSPACE_DIR", root):
+                first = app.save_upload("../../notes.txt", "text/plain", payload)
+                second = app.save_upload("../../notes.txt", "text/plain", payload)
+                self.assertEqual(first["name"], "notes.txt")
+                self.assertNotEqual(first["path"], second["path"])
+                self.assertEqual((root / first["path"]).read_bytes(), b"hello")
+                self.assertTrue(first["path"].startswith(".terminux-uploads/"))
+                with self.assertRaises(ValueError):
+                    app.save_upload("bad.txt", "text/plain", "not-base64!")
+                too_large = base64.b64encode(b"x" * (app.MAX_UPLOAD_BYTES + 1)).decode("ascii")
+                with self.assertRaises(ValueError):
+                    app.save_upload("large.bin", "application/octet-stream", too_large)
+            if os.name == "posix":
+                uploads = root / app.UPLOADS_DIR_NAME
+                self.assertEqual(uploads.stat().st_mode & 0o777, 0o700)
+                self.assertEqual((root / first["path"]).stat().st_mode & 0o777, 0o600)
+
+    def test_upload_endpoint_rejects_oversized_decoded_file_and_tampered_path(self):
+        with tempfile.TemporaryDirectory() as temporary, local_server(Path(temporary)) as url:
+            status, _headers, body = http_request(url, "/api/upload", {
+                "name": "../receipt.txt", "mimeType": "text/plain", "data": base64.b64encode(b"distinct file bytes").decode("ascii"),
+            })
+            self.assertEqual(status, 201)
+            response = json.loads(body)
+            self.assertEqual(set(response), {"file"})
+            self.assertEqual(set(response["file"]), {"name", "path", "size", "mimeType"})
+            self.assertEqual(response["file"]["name"], "receipt.txt")
+            self.assertNotIn("distinct file bytes", body.decode("utf-8"))
+            self.assertNotIn(base64.b64encode(b"distinct file bytes").decode("ascii"), body.decode("utf-8"))
+            listing = app.list_workspace(app.UPLOADS_DIR_NAME)
+            self.assertNotIn({"name": ".metadata", "type": "directory"}, listing["entries"])
+            visible_file = next(item for item in listing["entries"] if item["path"] == response["file"]["path"])
+            self.assertEqual(visible_file["name"], "receipt.txt")
+
+            oversized = base64.b64encode(b"x" * (app.MAX_UPLOAD_BYTES + 1)).decode("ascii")
+            status, _headers, _body = http_request(url, "/api/upload", {
+                "name": "large.bin", "mimeType": "application/octet-stream", "data": oversized,
+            })
+            self.assertEqual(status, 400)
+
+            saved = app.save_upload("safe.txt", "text/plain", base64.b64encode(b"ok").decode("ascii"))
+            forged = {**saved, "path": ".terminux-uploads/../../outside.txt"}
+            with self.assertRaises(ValueError):
+                app._validated_upload(forged)
+
+    def test_workspace_files_endpoint_lists_and_serves_safe_downloads(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "notes.txt").write_text("hello", encoding="utf-8")
+            (root / "large.dat").write_bytes(b"123456")
+            (root / "preview.html").write_text("<script>unsafe()</script>", encoding="utf-8")
+            with local_server(root) as url, patch.object(app, "MAX_WORKSPACE_FILE_BYTES", 5):
+                status, _headers, body = http_request(url, "/api/files")
+                self.assertEqual(status, 200)
+                listing = json.loads(body)
+                self.assertEqual(listing["path"], ".")
+                self.assertIn({"name": "notes.txt", "type": "file"}, listing["entries"])
+
+                status, headers, body = http_request(url, "/api/file?path=notes.txt")
+                self.assertEqual(status, 200)
+                self.assertEqual(body, b"hello")
+                self.assertEqual(headers.get_content_type(), "text/plain")
+                self.assertTrue(headers["Content-Disposition"].startswith("inline;"))
+
+                with patch.object(app, "MAX_WORKSPACE_FILE_BYTES", 1024):
+                    status, headers, _body = http_request(url, "/api/file?path=preview.html")
+                self.assertEqual(status, 200)
+                self.assertIn("sandbox", headers["Content-Security-Policy"])
+
+                status, headers, _body = http_request(url, "/api/file?path=notes.txt&download=1")
+                self.assertEqual(status, 200)
+                self.assertTrue(headers["Content-Disposition"].startswith("attachment;"))
+
+                status, _headers, _body = http_request(url, "/api/file?path=../../outside.txt")
+                self.assertEqual(status, 400)
+                status, _headers, _body = http_request(url, "/api/file?path=large.dat")
+                self.assertEqual(status, 413)
+
+    def test_attachment_only_chat_is_accepted_and_keeps_metadata_not_content(self):
+        with tempfile.TemporaryDirectory() as temporary, local_server(Path(temporary)) as url:
+            metadata = app.save_upload("photo.png", "image/png", base64.b64encode(b"png-bytes").decode("ascii"))
+            started = threading.Event()
+
+            def controlled_worker(message, attachments):
+                self.assertEqual(message, "")
+                self.assertEqual(attachments, [metadata])
+                started.set()
+
+            with patch.object(app, "RUNNING", False), patch.object(app, "EVENTS", []), patch.object(app, "HISTORY", []), \
+                    patch.object(app, "save_events"), patch.object(app, "save_history"), patch.object(app, "run_agent", side_effect=controlled_worker):
+                status, _headers, body = http_request(url, "/api/chat", {"attachments": [metadata]})
+                self.assertEqual(status, 202)
+                self.assertTrue(started.wait(2))
+                self.assertEqual(app.EVENTS[0]["attachments"], [metadata])
+
+    def test_image_attachment_is_hydrated_only_for_active_gemini_request(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            raw = b"fake-image-binary"
+            with patch.object(app, "WORKSPACE_DIR", root):
+                metadata = app.save_upload("image.png", "image/png", base64.b64encode(raw).decode("ascii"))
+                prior_turn = {"role": "user", "parts": [
+                    {"text": "earlier reference"}, {"terminuxAttachment": metadata},
+                ]}
+                current_turn = {"role": "user", "parts": [
+                    {"text": "describe this"}, {"terminuxAttachment": metadata},
+                ]}
+                history = [prior_turn, current_turn]
+                active = app.build_gemini_payload(history, [metadata])
+                older = app.build_gemini_payload(history)
+
+            self.assertFalse(any("inlineData" in part for part in active["contents"][0]["parts"]))
+            active_parts = active["contents"][1]["parts"]
+            inline = next(part["inlineData"] for part in active_parts if "inlineData" in part)
+            self.assertEqual(inline, {"mimeType": "image/png", "data": base64.b64encode(raw).decode("ascii")})
+            self.assertNotIn("inlineData", json.dumps(older))
+            self.assertIn(metadata["path"], json.dumps(older))
+            self.assertNotIn(base64.b64encode(raw).decode("ascii"), json.dumps(history))
+
+    def test_source_attachment_with_generic_mime_is_included_as_text(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            with patch.object(app, "WORKSPACE_DIR", Path(temporary)):
+                metadata = app.save_upload("main.py", "application/octet-stream", base64.b64encode(b"print('hi')").decode("ascii"))
+                payload = app.build_gemini_payload([{"role": "user", "parts": [
+                    {"text": "Review this file."}, {"terminuxAttachment": metadata},
+                ]}], [metadata])
+        self.assertEqual(metadata["mimeType"], "text/x-python")
+        self.assertIn("print('hi')", json.dumps(payload))
+
     def test_credentials_and_history_are_saved_with_private_permissions(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -88,14 +248,18 @@ class AgentCoreTests(unittest.TestCase):
             url = f"http://127.0.0.1:{server.server_address[1]}"
             try:
                 with patch.object(app, "CONFIG_DIR", root), patch.object(app, "CONFIG_FILE", root / "config.json"), patch.dict(app.CONFIG, {}, clear=True):
-                    body = json.dumps({"apiKey":"gemini-secret","githubToken":"github-secret","cloudflareToken":"cloudflare-secret","passTokensToShell":True,"model":"gemini-test"}).encode()
+                    body = json.dumps({"apiKey":"AQ.synthetic-test-key","githubToken":"github-secret","cloudflareToken":"cloudflare-secret","passTokensToShell":True,"model":"gemini-test"}).encode()
                     request = Request(url + "/api/config", data=body, headers={"Content-Type":"application/json"}, method="POST")
                     saved = json.load(urlopen(request))
                     visible = json.load(urlopen(url + "/api/config"))
+                    persisted = json.loads((root / "config.json").read_text(encoding="utf-8"))
                 self.assertTrue(saved["githubConfigured"] and saved["cloudflareConfigured"])
+                self.assertTrue(saved["configured"])
                 self.assertTrue(saved["passTokensToShell"])
+                self.assertEqual(persisted["api_key"], "AQ.synthetic-test-key")
                 self.assertNotIn("github-secret", json.dumps(visible))
                 self.assertNotIn("cloudflare-secret", json.dumps(visible))
+                self.assertNotIn("AQ.synthetic-test-key", json.dumps(visible))
             finally:
                 server.shutdown()
                 server.server_close()
@@ -132,6 +296,8 @@ class AgentCoreTests(unittest.TestCase):
             (root / ".env").write_text("SECRET=hidden", encoding="utf-8")
             (root / ".env.production").write_text("SECRET=also-hidden", encoding="utf-8")
             (root / "icon.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+            (root / ".terminux-uploads").mkdir()
+            (root / ".terminux-uploads" / "private.txt").write_text("must stay local", encoding="utf-8")
             calls = []
 
             def fake_api(_provider, method, path, body=None):
