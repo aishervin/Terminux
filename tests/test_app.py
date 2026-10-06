@@ -38,6 +38,12 @@ class AgentCoreTests(unittest.TestCase):
             result = app.execute_command("printf '%s:%s' \"${GITHUB_TOKEN-unset}\" \"${CLOUDFLARE_API_TOKEN-unset}\"")
         self.assertEqual(result["output"], "unset:unset")
 
+    def test_provider_tokens_enter_shell_only_after_opt_in(self):
+        settings = {"pass_tokens_to_shell": True, "github_token": "gh-cli-token", "cloudflare_token": "cf-cli-token"}
+        with patch.object(app, "WORKSPACE_DIR", Path.cwd()), patch.dict(app.CONFIG, settings):
+            result = app.execute_command("printf '%s:%s' \"$GH_TOKEN\" \"$CLOUDFLARE_API_TOKEN\"")
+        self.assertEqual(result["output"], "gh-cli-token:cf-cli-token")
+
     def test_workspace_read_write_and_escape_guard(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -53,11 +59,13 @@ class AgentCoreTests(unittest.TestCase):
             root = Path(temporary)
             with patch.object(app, "CONFIG_DIR", root), patch.object(app, "CONFIG_FILE", root / "config.json"), patch.object(app, "HISTORY_FILE", root / "history.json"), patch.object(app, "HISTORY", [{"role": "user", "parts": [{"text": "continue"}]}]):
                 with patch.dict(app.CONFIG, {"api_key": "gemini-test", "github_token": "github-test", "cloudflare_token": "cloudflare-test", "model": "gemini-test-model"}):
+                    app.CONFIG["pass_tokens_to_shell"] = True
                     app.save_config()
                 app.save_history()
                 settings = json.loads((root / "config.json").read_text(encoding="utf-8"))
                 self.assertEqual(settings["github_token"], "github-test")
                 self.assertEqual(settings["cloudflare_token"], "cloudflare-test")
+                self.assertTrue(settings["pass_tokens_to_shell"])
                 if os.name == "posix":
                     self.assertEqual((root / "config.json").stat().st_mode & 0o777, 0o600)
                     self.assertEqual(root.stat().st_mode & 0o777, 0o700)
@@ -80,11 +88,12 @@ class AgentCoreTests(unittest.TestCase):
             url = f"http://127.0.0.1:{server.server_address[1]}"
             try:
                 with patch.object(app, "CONFIG_DIR", root), patch.object(app, "CONFIG_FILE", root / "config.json"), patch.dict(app.CONFIG, {}, clear=True):
-                    body = json.dumps({"apiKey":"gemini-secret","githubToken":"github-secret","cloudflareToken":"cloudflare-secret","model":"gemini-test"}).encode()
+                    body = json.dumps({"apiKey":"gemini-secret","githubToken":"github-secret","cloudflareToken":"cloudflare-secret","passTokensToShell":True,"model":"gemini-test"}).encode()
                     request = Request(url + "/api/config", data=body, headers={"Content-Type":"application/json"}, method="POST")
                     saved = json.load(urlopen(request))
                     visible = json.load(urlopen(url + "/api/config"))
                 self.assertTrue(saved["githubConfigured"] and saved["cloudflareConfigured"])
+                self.assertTrue(saved["passTokensToShell"])
                 self.assertNotIn("github-secret", json.dumps(visible))
                 self.assertNotIn("cloudflare-secret", json.dumps(visible))
             finally:

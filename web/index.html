@@ -16,7 +16,7 @@
   </style>
   <style>
     .integrations{display:flex;gap:7px;margin-top:13px;flex-wrap:wrap}.integration-badge{border:1px solid var(--line);border-radius:99px;padding:5px 9px;color:var(--muted);font-size:10px}.integration-badge.ready{border-color:#526244;color:#c9eaa8}
-    dialog{max-height:90vh;overflow:auto;width:min(520px,calc(100% - 28px))}.field{margin:14px 0}.forget{display:flex;gap:7px;align-items:center;color:#ffb4ad;font-size:10px;margin-top:7px}.forget input{width:auto;accent-color:var(--red)}
+    dialog{max-height:90vh;overflow:auto;width:min(520px,calc(100% - 28px))}.field{margin:14px 0}.forget{display:flex;gap:7px;align-items:center;color:#ffb4ad;font-size:10px;margin-top:7px}.forget input{width:auto;accent-color:var(--red)}.passline{display:flex;gap:8px;align-items:center;color:var(--orange);font-size:12px}.passline input{width:auto;accent-color:var(--orange)}
   </style>
 </head>
 <body>
@@ -60,6 +60,7 @@
       <div class="field"><label for="model">نام مدل</label><input id="model" value="gemini-2.5-flash" spellcheck="false"></div>
       <div class="field"><label for="githubToken">GitHub personal access token</label><input id="githubToken" type="password" autocomplete="off" placeholder="ghp_…"><a class="key-link" href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noreferrer">ساخت توکن GitHub ↗</a><label class="forget"><input id="clearGithubToken" type="checkbox"> پاک‌کردن توکن ذخیره‌شده</label></div>
       <div class="field"><label for="cloudflareToken">Cloudflare API token</label><input id="cloudflareToken" type="password" autocomplete="off" placeholder="توکن Cloudflare"><a class="key-link" href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noreferrer">ساخت توکن Cloudflare ↗</a><label class="forget"><input id="clearCloudflareToken" type="checkbox"> پاک‌کردن توکن ذخیره‌شده</label></div>
+      <div class="field"><label class="passline"><input id="passTokensToShell" type="checkbox"> در دسترس قراردادن توکن‌ها برای فرمان‌های gh و wrangler</label><p>این گزینه توکن‌ها را فقط به فرایند فرمان‌های Termux می‌دهد. اگر فرمانی آن‌ها را چاپ کند، خروجی می‌تواند به Gemini برگردد.</p></div>
       <div class="dialog-actions"><a class="key-link" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">دریافت API key ↗</a><div><button class="action" type="button" id="cancelSettings">بستن</button> <button class="action primary" type="submit">ذخیره</button></div></div>
     </form>
   </dialog>
@@ -170,6 +171,7 @@
         document.querySelector('#clearApiKey').checked=false;
         document.querySelector('#clearGithubToken').checked=false;
         document.querySelector('#clearCloudflareToken').checked=false;
+        document.querySelector('#passTokensToShell').checked=!!config.passTokensToShell;
         settingsDialog.showModal();
       } catch (error) { appendMessage('error',error.message,'LOCAL AGENT'); }
     }
@@ -186,7 +188,7 @@
     document.querySelector('#settingsForm').addEventListener('submit',async event=>{
       event.preventDefault();
       const submit=event.submitter;submit.disabled=true;
-      try{await api('/api/config',{apiKey:document.querySelector('#apiKey').value,model:document.querySelector('#model').value,githubToken:document.querySelector('#githubToken').value,cloudflareToken:document.querySelector('#cloudflareToken').value,clearApiKey:document.querySelector('#clearApiKey').checked,clearGithubToken:document.querySelector('#clearGithubToken').checked,clearCloudflareToken:document.querySelector('#clearCloudflareToken').checked});document.querySelector('#apiKey').value='';document.querySelector('#githubToken').value='';document.querySelector('#cloudflareToken').value='';settingsDialog.close();appendMessage('assistant','اتصال‌ها ذخیره شدند. Terminux آمادهٔ ساخت و اجرای پروژه است.','LOCAL AGENT');}
+      try{await api('/api/config',{apiKey:document.querySelector('#apiKey').value,model:document.querySelector('#model').value,githubToken:document.querySelector('#githubToken').value,cloudflareToken:document.querySelector('#cloudflareToken').value,clearApiKey:document.querySelector('#clearApiKey').checked,clearGithubToken:document.querySelector('#clearGithubToken').checked,clearCloudflareToken:document.querySelector('#clearCloudflareToken').checked,passTokensToShell:document.querySelector('#passTokensToShell').checked});document.querySelector('#apiKey').value='';document.querySelector('#githubToken').value='';document.querySelector('#cloudflareToken').value='';settingsDialog.close();appendMessage('assistant','اتصال‌ها ذخیره شدند. Terminux آمادهٔ ساخت و اجرای پروژه است.','LOCAL AGENT');}
       catch(error){alert(error.message);}finally{submit.disabled=false;}
     });
     document.querySelector('#autoApprove').addEventListener('change',async event=>{

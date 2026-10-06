@@ -55,6 +55,7 @@ CONFIG = {
     "model": os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"),
     "github_token": os.environ.get("GITHUB_TOKEN", ""),
     "cloudflare_token": os.environ.get("CLOUDFLARE_API_TOKEN", ""),
+    "pass_tokens_to_shell": os.environ.get("TERMINUX_PASS_TOKENS_TO_SHELL") == "1",
 }
 
 
@@ -68,6 +69,7 @@ def load_config() -> None:
                 "model": os.environ.get("GEMINI_MODEL") or saved.get("model", "gemini-2.5-flash"),
                 "github_token": os.environ.get("GITHUB_TOKEN") or saved.get("github_token", ""),
                 "cloudflare_token": os.environ.get("CLOUDFLARE_API_TOKEN") or saved.get("cloudflare_token", ""),
+                "pass_tokens_to_shell": os.environ.get("TERMINUX_PASS_TOKENS_TO_SHELL") == "1" or saved.get("pass_tokens_to_shell", False),
             }
         except (OSError, ValueError):
             pass
@@ -342,6 +344,12 @@ def execute_command(command: str, timeout: int = 300) -> dict:
         command_env = os.environ.copy()
         for secret_name in ("GEMINI_API_KEY", "GITHUB_TOKEN", "GH_TOKEN", "CLOUDFLARE_API_TOKEN", "CF_API_TOKEN"):
             command_env.pop(secret_name, None)
+        if CONFIG.get("pass_tokens_to_shell"):
+            if CONFIG.get("github_token"):
+                command_env["GH_TOKEN"] = CONFIG["github_token"]
+                command_env["GITHUB_TOKEN"] = CONFIG["github_token"]
+            if CONFIG.get("cloudflare_token"):
+                command_env["CLOUDFLARE_API_TOKEN"] = CONFIG["cloudflare_token"]
         result = subprocess.run(
             command,
             shell=True,
@@ -628,6 +636,7 @@ class Handler(BaseHTTPRequestHandler):
                     "configured": bool(CONFIG.get("api_key")),
                     "githubConfigured": bool(CONFIG.get("github_token")),
                     "cloudflareConfigured": bool(CONFIG.get("cloudflare_token")),
+                    "passTokensToShell": CONFIG.get("pass_tokens_to_shell", False),
                     "model": CONFIG.get("model"),
                     "workspace": str(WORKSPACE_DIR),
                 }
@@ -637,6 +646,7 @@ class Handler(BaseHTTPRequestHandler):
                 "configured": bool(CONFIG.get("api_key")),
                 "githubConfigured": bool(CONFIG.get("github_token")),
                 "cloudflareConfigured": bool(CONFIG.get("cloudflare_token")),
+                "passTokensToShell": CONFIG.get("pass_tokens_to_shell", False),
                 "model": CONFIG.get("model"),
             })
         elif path == "/healthz":
@@ -695,6 +705,11 @@ class Handler(BaseHTTPRequestHandler):
                     CONFIG[key] = value.strip()
                 elif data.get(clear_field) is True:
                     CONFIG[key] = ""
+            pass_tokens = data.get("passTokensToShell", CONFIG.get("pass_tokens_to_shell", False))
+            if not isinstance(pass_tokens, bool):
+                self._json(400, {"error": "مقدار passTokensToShell باید true یا false باشد."})
+                return
+            CONFIG["pass_tokens_to_shell"] = pass_tokens
             CONFIG["model"] = model
             try:
                 save_config()
@@ -706,6 +721,7 @@ class Handler(BaseHTTPRequestHandler):
                 "configured": bool(CONFIG["api_key"]),
                 "githubConfigured": bool(CONFIG.get("github_token")),
                 "cloudflareConfigured": bool(CONFIG.get("cloudflare_token")),
+                "passTokensToShell": CONFIG.get("pass_tokens_to_shell", False),
                 "model": model,
             })
         elif path == "/api/approval":
