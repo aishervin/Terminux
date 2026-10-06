@@ -166,13 +166,13 @@ def tool_declarations() -> list[dict]:
               {"path": string("Workspace-relative file path.")}, ["path"]),
         _tool("write_file", "Create or replace a UTF-8 text file inside the local project workspace.",
               {"path": string("Workspace-relative file path."), "content": string("Complete file contents.")}, ["path", "content"]),
-        _tool("github_api", "Call the GitHub REST API using the saved local token. Use paths such as /user/repos or /repos/OWNER/REPO/contents/README.md. The API key is never returned to the model.",
+        _tool("github_api", "Call the GitHub REST API using the saved local token. Use paths such as /user/repos or /repos/OWNER/REPO/contents/README.md. The normal API result omits the token.",
               {"method": string("HTTP method: GET, POST, PUT, PATCH or DELETE."), "path": string("A relative GitHub REST API path."), "body": {"type": "OBJECT", "description": "JSON request body, when required."}}, ["method", "path"]),
         _tool("github_create_repo", "Create a GitHub repository for the authenticated user or an organization. Ask the user about public/private visibility if it is not clear.",
               {"name": string("Repository name."), "private": {"type": "BOOLEAN", "description": "Whether the new repository is private."}, "description": string("Repository description."), "organization": string("Optional organization login; omit for the authenticated user.")}, ["name", "private"]),
-        _tool("github_publish_workspace", "Commit all supported text files from a local workspace folder to an existing GitHub repository using the Git Data API. Creates one commit and never sends the saved token to the model.",
+        _tool("github_publish_workspace", "Commit all supported local project files to an existing GitHub repository using the Git Data API. Creates one commit; the normal result omits the saved token.",
               {"owner": string("Repository owner login."), "repo": string("Repository name."), "branch": string("Optional target branch; defaults to the repository default branch."), "message": string("Commit message."), "path": string("Optional workspace-relative project folder; defaults to workspace root.")}, ["owner", "repo", "message"]),
-        _tool("cloudflare_api", "Call the Cloudflare REST API using the saved local token. Use paths such as /zones or /accounts/ACCOUNT_ID/workers/scripts. The API token is never returned to the model.",
+        _tool("cloudflare_api", "Call the Cloudflare REST API using the saved local token. Use paths such as /zones or /accounts/ACCOUNT_ID/workers/scripts. The normal API result omits the token.",
               {"method": string("HTTP method: GET, POST, PUT, PATCH or DELETE."), "path": string("A relative Cloudflare API path, without /client/v4."), "body": {"type": "OBJECT", "description": "JSON request body, when required."}}, ["method", "path"]),
     ]
 

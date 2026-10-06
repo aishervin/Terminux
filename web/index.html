@@ -157,7 +157,7 @@
     }
     function setIntegration(id,name,ready) {
       const badge=document.querySelector(`#${id}`);
-      badge.textContent=`${name} · ${ready?'متصل':'تنظیم نشده'}`;
+      badge.textContent=`${name} · ${ready?'توکن ثبت شده':'تنظیم نشده'}`;
       badge.classList.toggle('ready',ready);
     }
     async function showSettings() {
