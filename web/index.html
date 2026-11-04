@@ -41,6 +41,71 @@ footer{border-top:1px solid #ffffff12}.local-badge{color:var(--green)}
 dialog{border:1px solid #414753;border-radius:19px;background:#11151b;box-shadow:0 28px 100px #000c}dialog::backdrop{background:#030407c9;backdrop-filter:blur(7px)}.close-btn{border-radius:9px}.field input:not([type=checkbox]){border-radius:10px;background:#090c11;font:12px var(--mono)}.key-link{color:var(--orange-soft);text-decoration:none}.key-link:hover{text-decoration:underline}.file-entry{border-radius:9px}.file-entry:hover,.file-entry.selected{background:#ff8a0012;color:var(--orange-soft)}
 @media(max-width:680px){.shell{padding:0 12px;grid-template-rows:58px minmax(0,1fr) 28px}.brand-mark{width:33px;height:33px;border-radius:10px}.icon-btn{height:34px;padding:0 9px;font-size:10px}#feed{gap:12px}.message{padding:12px 13px;border-radius:14px}.message-body{font-size:13px}#prompt{min-height:82px;font-size:13px}.composebox{border-radius:16px;padding:10px 11px 9px}.send{padding:9px 16px}.dialog-inner{padding:18px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+
+/* Codein chat layout port: message rhythm, identity row, trace cards and pill composer */
+:root{--codein-bg:#08090c;--codein-surface:#111318;--codein-raised:#191c23;--codein-border:#343943;--codein-orange:#ff8a00;--codein-soft:#ffb45c;--codein-green:#39d98a;--codein-muted:#767d8a}
+body{background:var(--codein-bg)}
+.shell{max-width:100%;padding:0;grid-template-rows:58px minmax(0,1fr) 0}
+header{padding:0 clamp(14px,3vw,34px);background:#0b0d12;border-bottom:1px solid #ffffff12}
+main{width:min(100%,900px);padding:10px 0 0;grid-template-rows:auto minmax(0,1fr) auto}
+.topline{padding:0 16px 8px}
+#feed{padding:18px clamp(14px,3vw,24px) 22px;gap:22px}
+.welcome{font-size:clamp(22px,4vw,32px);font-weight:700;letter-spacing:-.04em;color:#e7e9ed}
+.welcome:after{content:"";display:block;width:38px;height:3px;margin:16px auto 0;border-radius:99px;background:linear-gradient(90deg,#ff8a00,#ffb45c)}
+.message{min-width:0;max-width:100%;width:100%;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;line-height:1.8}
+.message.user{align-self:flex-end;width:fit-content;max-width:min(88%,680px);padding:11px 15px;background:#1a1d24;border:1px solid #ffffff13;border-radius:18px 18px 5px 18px}
+.message.assistant{align-self:stretch;width:100%;padding:0 2px;background:transparent;border:0}
+.message.error{padding:12px 14px;background:#241416;border:1px solid #ff5b5b55;border-radius:13px}
+.message-label{display:flex;align-items:center;gap:8px;margin:0 0 8px;color:var(--codein-orange);font:700 11px system-ui,sans-serif;letter-spacing:.02em;text-align:start;direction:ltr}
+.message.assistant .message-label:before{content:"S";display:grid;place-items:center;width:23px;height:23px;border-radius:8px;background:linear-gradient(145deg,#ffad36,#e76b00);color:#17110b;font:800 12px system-ui}
+.message.user .message-label{justify-content:flex-end;color:var(--codein-soft);margin-bottom:4px}
+.message.user .message-label:before{content:"";display:none}
+.message-body{font-size:14px;line-height:1.9;color:#e7e9ed}
+.message.user .message-body{color:#f1f2f4}
+.message.assistant .message-body{padding-inline-start:31px}
+.message-files{padding-inline-start:31px}
+.command-card,.tool-output{margin-inline-start:31px;border:1px solid #343943;border-radius:14px;background:#11151b;box-shadow:none}
+.command-card{border-color:#a45e2455;background:#17140f}
+.command-head,.tool-head{display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid #ffffff12;color:#ffb45c;font-size:11px;font-weight:700}
+.command-code,.log-text{background:#090c11;color:#e7e9ed;font:12px/1.75 ui-monospace,SFMono-Regular,Menlo,monospace;padding:13px}
+.command-actions,.log-actions{padding:9px 12px}
+.action{border-radius:9px}
+.action.primary{background:#ff8a00;color:#17110b}
+.tool-state{color:#39d98a}.tool-state.fail{color:#ff5b5b}
+.message-actions{display:flex;gap:5px;padding:3px 0 0 30px}
+.message-action{border:0;background:transparent;color:#858d9a;padding:5px 8px;font-size:10px;border-radius:7px}
+.message-action:hover{background:#ffffff0b;color:#ffb45c}
+.composer{position:relative;padding:10px 14px max(12px,env(safe-area-inset-bottom));background:linear-gradient(180deg,transparent,#08090c 20%)}
+.composebox{display:grid;grid-template-columns:40px minmax(0,1fr) 42px;grid-template-rows:auto auto;align-items:end;gap:3px 7px;padding:8px 9px;border:1px solid #414753;border-radius:26px;background:#191c23;box-shadow:0 12px 35px #0007}
+#prompt{grid-column:2;grid-row:1;min-height:54px;max-height:180px;resize:none;padding:8px 2px;font-size:14px}
+#prompt::placeholder{color:#858d9a}
+.selected-files{grid-column:1/-1;grid-row:1;padding:2px 5px}
+.compose-bottom{display:contents}
+.bottom-controls{grid-column:1;grid-row:2;display:flex;align-items:center;justify-content:center;gap:2px}
+.auto-label{display:none}
+.attach-button{width:38px;height:38px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:transparent;color:#aab1bd;font-size:0}
+.attach-button:before{content:"＋";font-size:23px;line-height:1}
+.send{grid-column:3;grid-row:2;width:40px;height:40px;padding:0;border-radius:50%;font-size:0;display:grid;place-items:center;background:#ff8a00;color:#17110b}
+.send:after{content:"↑";font-size:23px;font-weight:700}
+.send:disabled{opacity:.35}
+.upload-note{grid-column:2;grid-row:2;font-size:10px}
+.attachment-chip{background:#0e1117}
+footer{display:none}
+@media(max-width:680px){
+ .shell{grid-template-rows:54px minmax(0,1fr) 0}
+ header{padding:0 12px}
+ main{padding-top:6px}
+ .topline{padding-inline:12px}
+ #feed{padding:14px 13px 18px;gap:19px}
+ .message.user{max-width:94%}
+ .message-body{font-size:13px}
+ .message.assistant .message-body,.message-files,.command-card,.tool-output{margin-inline-start:0;padding-inline-start:0}
+ .composer{padding:7px 10px max(10px,env(safe-area-inset-bottom))}
+ .composebox{grid-template-columns:36px minmax(0,1fr) 40px;border-radius:23px}
+ #prompt{min-height:48px}
+ .send{width:37px;height:37px}
+}
+
 </style>
 </head>
 <body>
@@ -207,6 +272,55 @@ dialog{border:1px solid #414753;border-radius:19px;background:#11151b;box-shadow
         else pane.append(el('div','preview-empty','پیش‌نمایش این نوع فایل در دسترس نیست. از دانلود استفاده کنید.'));
       }catch(error){pane.replaceChildren(el('div','preview-empty',error.message));}
     }
+
+    // Codein-style chat message renderer. Existing Terminux event/API contracts remain unchanged.
+    function appendMessage(type,text,label,attachments=[]){
+      document.querySelector('#welcome')?.remove();
+      const card=el('article',`message ${type}`);
+      const identity=type==='user'?'You':type==='assistant'?'SHΞN™':(label||'SYSTEM');
+      card.append(el('div','message-label',identity));
+      if(text){const body=el('div','message-body',text);body.dir='auto';card.append(body);}
+      addAttachmentLinks(card,attachments);
+      if(type==='assistant'&&text){
+        const actions=el('div','message-actions');
+        const copy=el('button','message-action','کپی پاسخ');copy.type='button';
+        copy.onclick=async()=>{try{await navigator.clipboard.writeText(text);copy.textContent='کپی شد';}catch(_){copy.textContent='کپی نشد';}};
+        actions.append(copy);card.append(actions);
+      }
+      feed.append(card);card.scrollIntoView({behavior:'smooth',block:'nearest'});
+    }
+    function appendCommand(command,id){
+      document.querySelector('#welcome')?.remove();
+      const card=el('article','command-card');
+      card.append(el('div','command-head','⌑  اجازه اجرای فرمان'));
+      const code=el('pre','command-code',command);code.dir='ltr';card.append(code);
+      const actions=el('div','command-actions');
+      const approve=el('button','action primary','فقط این بار اجرا شود');
+      const reject=el('button','action reject','رد کردن');
+      approve.onclick=()=>decide(id,true,approve,reject);reject.onclick=()=>decide(id,false,approve,reject);
+      actions.append(approve,reject);card.append(actions);feed.append(card);
+      card.scrollIntoView({behavior:'smooth',block:'nearest'});
+    }
+    function appendOutput(event){
+      document.querySelector('#welcome')?.remove();
+      const details=el('article','tool-output');
+      const head=el('div','tool-head');
+      const state=el('span',`tool-state ${event.exit_code===0?'':'fail'}`,event.exit_code===0?'● Completed · exit 0':`● Failed · exit ${event.exit_code??'?' }`);
+      head.append(state,el('span','log-meta',event.tool||'TERMUX'));
+      details.append(head);
+      const command=el('pre','command-code',event.command||'');command.dir='ltr';
+      const commandLabel=el('div','command-head','COMMAND');details.append(commandLabel,command);
+      const output=event.output||'(no output)';
+      const outputLabel=el('div','command-head','OUTPUT');
+      const pre=el('pre','log-text',output);pre.dir='ltr';details.append(outputLabel,pre);
+      const actions=el('div','log-actions');
+      const copy=el('button','action','کپی خروجی'),download=el('button','action','دانلود لاگ');
+      copy.onclick=async()=>{try{await navigator.clipboard.writeText(output);copy.textContent='کپی شد';}catch(_){copy.textContent='کپی نشد';}};
+      download.onclick=()=>saveText(`terminux-${event.tool||'log'}.txt`,output);
+      actions.append(copy,download);details.append(actions);feed.append(details);
+      details.scrollIntoView({behavior:'smooth',block:'nearest'});
+    }
+
     document.querySelector('#sendButton').addEventListener('click',sendPrompt);
     promptBox.addEventListener('input',updateSend);
     document.querySelector('#fileInput').addEventListener('change',event=>{uploadSelection(Array.from(event.target.files));event.target.value='';});
