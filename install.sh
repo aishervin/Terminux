@@ -1,104 +1,43 @@
 #!/usr/bin/env bash
 # =========================================================
-# Terminux — Ultra-Stable Graphical Installation for Termux
+#  Terminux â one-line installer for Termux
+#  bash <(curl -fsSL https://raw.githubusercontent.com/aishervin/Terminux/main/install.sh)
 # =========================================================
-
 set -e
 
-# Colors
-CYAN='\033[0;36m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m' 
-BOLD='\033[1m'
-
-INSTALL_DIR="$HOME/Terminux"
 REPO_URL="https://github.com/aishervin/Terminux.git"
+INSTALL_DIR="$HOME/Terminux"
+WORKSPACE_DIR="${TERMINUX_WORKSPACE:-$HOME/Terminux-workspace}"
+TOTAL=5
 
-show_header() {
-  clear
-  echo -e "${CYAN}${BOLD}"
-  echo "  _____ _____ ____  __  __ ___ _   _ _   ___  __"
-  echo " |_   _| ____|  _ \|  \/  |_ _| \ | | | | \ \/ /"
-  echo "   | | |  _| | |_) | |\/| || ||  \| | | | |\  / "
-  echo "   | | | |___|  _ <| |  | || || |\  | |_| |/  \ "
-  echo "   |_| |_____|_| \_\_|  |_|___|_| \_|\___//_/\_\\"
-  echo -e "${NC}"
-}
-
-show_status() {
-  local step_num=$1
-  local msg=$2
-  local total_steps=5
-  local percentage=$((step_num * 100 / total_steps))
-  local width=25
-  local completed=$((step_num * width / total_steps))
-  local remaining=$((width - completed))
-  
-  # Use \r and no newline to keep it on one line. Clear line first.
-  printf "\r\033[K${BOLD}${CYAN}📦 Step $step_num/$total_steps:${NC} $msg [${YELLOW}"
-  for ((i=0; i<completed; i++)); do printf "█"; done
-  for ((i=0; i<remaining; i++)); do printf " "; done
-  printf "${NC}] %d%%" "$percentage"
-}
-
-# 1. Update Packages
-show_header
-show_status 1 "Updating environment..."
-if command -v pkg >/dev/null 2>&1; then
-  pkg update -y >/dev/null 2>&1 || true
-  pkg install -y nodejs-lts git python termux-api xdg-utils >/dev/null 2>&1 || true
+if [ -t 1 ]; then
+  C='\033[0;36m'; G='\033[0;32m'; Y='\033[1;33m'; B='\033[1m'; D='\033[2m'; R='\033[0m'
 else
-  echo -e "\n${RED}⚠️ Not a Termux environment. Manual install required.${NC}"
+  C=''; G=''; Y=''; B=''; D=''; R=''
 fi
 
-# 2. Clone/Update Repo
-show_status 2 "Syncing Terminux Source Code..."
-if [ -d "$INSTALL_DIR" ]; then
-  cd "$INSTALL_DIR"
-  git pull origin main || true
-else
-  git clone "$REPO_URL" "$INSTALL_DIR"
-  cd "$INSTALL_DIR"
-fi
+printf "${C}${B}"
+cat << 'LOGO'
+   _____ _____ ____  __  __ ___ _   _ _   ___  __
+  |_   _| ____|  _ \|  \/  |_ _| \ | | | | \ \/ /
+    | | |  _| | |_) | |\/| || ||  \| | | | |\  /
+    | | | |___|  _ <| |  | || || |\  | |_| |/  \
+    |_| |____|_| \_\Wßß××ßßß×××ËË×Ë××ËÂÑÓÂ[ÔH[	ÐU\Z[^	ÔH	Ñx ,ÈØØ[RHYÙ[Ü\]^	ÔW[	ÑYÚ]XÛÛKØZ\Ú\[Õ\Z[^	ÔWÕTLÝ]\Ê
+HÂÕTI
 
-# 3. NPM Install
-show_status 3 "Installing dependencies..."
-npm install --production=false >/dev/null 2>&1
+ÕT
+ÌJJBØØ[\ÙÏHHØØ[ÝI
 
-# 4. Global Launcher
-show_status 4 "Creating Shortcut Launcher..."
-PREFIX_BIN="/data/data/com.termux/files/usr/bin"
-[ ! -d "$PREFIX_BIN" ] && PREFIX_BIN="/usr/local/bin"
+ÕT
+LÕÕS
+JBØØ[ÚYLØØ[[YI
 
-if [ -w "$PREFIX_BIN" ] || [ "$EUID" -eq 0 ]; then
-  LAUNCHER="$PREFIX_BIN/terminux"
-  cat << EOF > "$LAUNCHER"
-#!/usr/bin/env bash
-export TERMINUX_WORKSPACE="\$HOME/Terminux-workspace"
-mkdir -p "\$TERMINUX_WORKSPACE"
-cd "$INSTALL_DIR"
-npm start
-EOF
-  chmod +x "$LAUNCHER"
-  LAUNCHER_CMD="terminux"
-else
-  LAUNCHER_CMD="npm start"
-fi
+ÕT
+ÚYÕÕS
+JBØØ[\HØØ[BÜ
 
-# 5. Verify Workspace
-show_status 5 "Configuring Workspace..."
-mkdir -p "$HOME/Terminux-workspace"
+OLÈO[YÈJÊÊJNÈÈ\ÏH¸¥¡ÈÛBÜ
 
-# AUTO-LAUNCH
-echo -e "\n"
-if [ "$LAUNCHER_CMD" = "terminux" ]; then
-  # Use am start for Termux to ensure browser opens if possible
-  if command -v termux-open-url >/dev/null 2>&1; then
-    (sleep 3 && termux-open-url http://localhost:3000) &
-  fi
-  terminux
-else
-  npm start
-fi
+OY[YÈOÚYÈJÊÊJNÈÈ\ÏH¸ ,ÈÈÛB[ÌÖÒövGµÒW2Gµ'ÒG´'ÒW2Gµ'ÒG´GÒS6BRWµ'Ò""F&"""F×6r""G7B §Ð ¢2r(	BVçf&öæÖVç@§7FGW2'WFFærVçf&öæÖVçB ¦b6öÖÖæB×b¶râöFWböçVÆÂ#âc²FVà¢¶rWFFR×âöFWböçVÆÂ#âcÇÂG'VP¢¶rç7FÆÂ×æöFV§2ÖÇG2vBFW&×WÖFr×WFÇ2âöFWböçVÆÂ#âcÇÂG'VP¦f ¢2(b¥B6÷W&6R6öFP§7FGW2'7æ6ær6÷W&6R6öFR ¦b²ÖB"Då5DÄÅôD"òævB"Ó²FVà¢vBÔ2"Då5DÄÅôD""VÆÂÒÖfbÖöæÇâöFWböçVÆÂ#âcÇÂG'VP¦VÇ6P¢&Ò×&b"Då5DÄÅôD" ¢vB6ÆöæRÒÖFWF"E$UõõU$Â""Då5DÄÅôD""âöFWböçVÆÂ#âc¦f ¢22ÒÒÒFWVæFVæ6W0§7FGW2&ç7FÆÆærFWVæFVæ6W2 ¦b6öÖÖæB×bçÒâöFWböçVÆÂ#âc²FVà¢V6ò" ¢V6ò"çÒæ÷Bf÷VæB(	Bç7FÆÂæöFRæ§2f'7C¢¶rç7FÆÂæöFV§2ÖÇG2 ¢WB¦f¦çÒç7FÆÂÒÖöÖCÖFWbÒÖæòÖVFBÒÖæòÖgVæBâöFWböçVÆÂ#âc ¢2BóR(	BÆVæ6W"6÷'F7W@§7FGW2&7&VFærÆVæ6W" ¥$Tdô$ãÒ"öFFöFFö6öÒçFW&×WöfÆW2÷W7"ö&â ¥²ÖB"E$Tdô$â"ÒÇÂ$Tdô$ãÒ"÷W7"öÆö6Âö&â ¤ÄTä4U%ô4ÔCÒ&çÒ7F'B ¦bÖ¶F"×"E$Tdô$â"#âöFWböçVÆÂbb²×r"E$Tdô$â"Ó²FVà¢6BÃÂTôbâ"E$Tdô$â÷FW&ÖçW ¢2÷W7"ö&âöVçb&6¦W÷'BDU$ÔåUõtõ$µ54SÒ"Etõ$µ54UôD" ¦Ö¶F"×%ÂEDU$ÔåUõtõ$µ54R ¦6B"Då5DÄÅôD" ¦WV2çÒ7F'@¤Tô`¢6ÖöB·"E$Tdô$â÷FW&ÖçW ¢ÄTä4U%ô4ÔCÒ'FW&ÖçW ¦f ¢2RóR(	Bv÷&·76P§7FGW2'&W&ærv÷&·76R ¦Ö¶F"×"Etõ$µ54UôD"  ¤$#Ò" ¦f÷"Ó²Ã##²²²²Fò$"³Ò.)hB#²FöæP§&çFb%Ç%Ã35´²GµÒW2Gµ'ÒG´wÒG´'×&VGGµ'ÒG´GÓRRGµ'ÕÆâ""D$" ¦V6ò" §&çFb"G´wÞ)ÉBGµ'ÒG´GÒW2Gµ'ÕÆâ""Då5DÄÅôD" §&çFb"G´wÞ)ÉBGµ'Òv÷&·76RG´GÒW2Gµ'ÕÆâ""Etõ$µ54UôD" §&çFb"G´wÞ)ÉBGµ'ÒÆVæ6W"G´GÒW2Gµ'ÕÆâ""DÄTä4U%ô4ÔB §&çFb"G´wÞ)ÉBGµ'ÒçFW&f6RG´GÖGG¢òöÆö6Æ÷7C£3Gµ'ÕÆâ ¦V6ò"  ¢2&r6÷VçFF÷vâ&Vf÷&Rf'7BÆVæ6§&çFb%Ã35·2 ¦f÷"âRB2"²Fð¢&çFb%Ã35·RG´7Ò ¢66RFà¢&çFb")h)hÆâ)h)hÆâ)h)hÆâ)h)hÆâ)h)hÆâ#³°¢"&çFb")h)h)h)h)hÆâ)h)hÆâ)h)h)h)h)hÆâ)h)hÆâ)h)h)h)h)h)hÆâ#³°¢2&çFb")h)h)h)h)hÆâ)h)hÆâ)h)h)h)h)hÆâ)h)hÆâ)h)h)h)h)hÆâ#³°¢B&çFb")h)h)h)hÆâ)h)h)h)hÆâ)h)h)h)h)hÆâ)h)hÆâ)h)hÆâ#³°¢R&çFb")h)h)h)h)hÆâ)h)hÆâ)h)h)h)h)hÆâ)h)hÆâ)h)h)h)h)hÆâ#³°¢W60¢&çFb"Gµ'ÒG´GÖ÷Væær'&÷w6W"âGµ'ÒG´'ÒGµÒVBGµ'ÒG´G×6V2(
+bGµ'ÕÆâ""F ¢6ÆVW¦FöæP§&çFb%Ã35·UÃ35´¢ §&çFb"G´wÒG´'×7F'FærFW&ÖçW(
+bGµ'ÕÆåÆâ  ¢2ÆVæ6¦6B"Då5DÄÅôD" ¦W÷'BDU$ÔåUõtõ$µ54SÒ"Etõ$µ54UôD" ¦b6öÖÖæB×bFW&×WÖ÷Vâ×W&ÂâöFWböçVÆÂ#âc²FVà¢6ÆVW2bbFW&×WÖ÷Vâ×W&ÂGG¢òöÆö6Æ÷7C£3âöFWböçVÆÂ#âc`¦f¦WV2çÒ7F'@ 

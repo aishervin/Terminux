@@ -844,7 +844,8 @@ function openMenu(k){if(cur===k)return closeMenu();cur=k;ml.replaceChildren();
     P[k][1].forEach(([t,p])=>row(t,'',()=>fill(p)));}
   else if(k==='ss')renderSession();
   else if(k==='gh')renderGithubRepos();
-  else if(k==='fl')renderFiles('/app/applet/Terminux-workspace');
+  else if(k==='fl'){mt.textContent='فایل‌ها';ml.replaceChildren();row('در حال دریافت فضای کاری…','',null,true);
+    try{const s=await api('/api/system/session');renderFiles(s.workspace||s.workspacePath||'.');}catch(err){ml.replaceChildren();row(err.message,'',null,true);}}
   else if(k==='st'){mt.textContent='تنظیمات';const a=$('#autoApprove');
     row('کلیدها، مدل و توکن‌ها','',()=>{closeMenu();$('#openSettings').click();});
     row('تأیید خودکار فرمان‌ها',a.checked?'روشن':'خاموش · هر فرمان تأیید می‌خواهد',()=>{a.click();closeMenu();});}
