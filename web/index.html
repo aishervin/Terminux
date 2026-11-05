@@ -163,6 +163,7 @@ dialog{border:1px solid #2c3036;border-radius:0;background:rgba(10,11,12,.94);ba
 .preview-pane{min-width:0;min-height:0;display:grid;grid-template-rows:auto 1fr}.preview-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}.preview-title{font-size:12px}
 .preview-content{min-height:0;overflow:auto;display:grid;place-items:center;padding:16px}.preview-content img,.preview-content iframe{width:100%;height:100%;min-height:300px;object-fit:contain;border:0}.preview-content pre{align-self:stretch;width:100%;margin:0;white-space:pre-wrap;overflow-wrap:anywhere;direction:ltr;text-align:left;font:12px/1.65 var(--mono);color:#e2ddd7}.preview-empty{color:var(--dim);font-size:12px;text-align:center;line-height:1.8}
 @media(max-width:680px){.files-body{grid-template-columns:1fr;grid-template-rows:minmax(150px,36%) 1fr}.file-sidebar{border-inline-end:0;border-bottom:1px solid var(--line)}.message.user{max-width:96%}}
+@media(max-width:680px){.menu{padding:56px 14px calc(150px + env(safe-area-inset-bottom,0px))}.mp{width:min(100%,340px)}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
 </head>
@@ -779,12 +780,15 @@ async function renderSession(){
   mt.textContent='نشست و زیرساخت ترموکس';ml.replaceChildren();row('در حال دریافت اطلاعات نشست…','',null,true);
   try{
     const s=await api('/api/system/session');ml.replaceChildren();
-    row('سیستم‌عامل و پلتفرم',s.platform+' ('+s.arch+')',null,true);
-    row('PID فرایند',String(s.pid),null,true);
-    row('مدت زمان فعالیت (Uptime)',Math.floor(s.uptime)+' ثانیه',null,true);
-    row('مصرف حافظه RAM',s.memory.rss+' / RAM کل: '+s.memory.systemTotal,null,true);
-    row('فضای کاری Termux',s.workspacePath,()=>renderFiles(s.workspacePath));
-    row('مدل فعال AI',s.activeModel,()=>openModels());
+    const mem=s.memory||{};
+    const ws=s.workspace||s.workspacePath||'—';
+    row('سیستم‌عامل و پلتفرم',(s.platform||'—')+' ('+(s.arch||'—')+')',null,true);
+    row('نسخهٔ Node',s.nodeVersion||'—',null,true);
+    row('PID فرایند',String(s.pid||'—'),null,true);
+    row('مدت زمان فعالیت (Uptime)',Math.floor(s.uptime||0)+' ثانیه',null,true);
+    row('مصرف حافظه RAM',(mem.rssMb!=null?mem.rssMb+' MB':'—')+' / RAM کل: '+(mem.systemTotalMb!=null?mem.systemTotalMb+' MB':'—'),null,true);
+    row('فضای کاری Termux',ws,()=>renderFiles(ws));
+    row('مدل فعال AI',s.activeModel||s.model||'—',()=>openModels());
   }catch(err){ml.replaceChildren();row(err.message,'',null,true);}
 }
 async function renderGithubRepos(filter='all'){

@@ -1220,10 +1220,13 @@ app.get('/api/system/session', (req: Request, res: Response) => {
     memory: {
       rssMb: Math.round(memoryUsage.rss / (1024 * 1024)),
       heapTotalMb: Math.round(memoryUsage.heapTotal / (1024 * 1024)),
-      heapUsedMb: Math.round(memoryUsage.heapUsed / (1024 * 1024))
+      heapUsedMb: Math.round(memoryUsage.heapUsed / (1024 * 1024)),
+      systemTotalMb: Math.round(os.totalmem() / (1024 * 1024))
     },
     provider: config.provider || 'gemini',
-    model: config.model,
+    model: currentModel(),
+    activeModel: currentModel(),
+    workspacePath: WORKSPACE_DIR,
     running: isRunning,
     autoApprove
   });
