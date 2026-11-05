@@ -18,8 +18,7 @@ pkg update -y
 pkg install -y nodejs-lts git termux-api
 step "۲/۵ · دریافت سورس"
 if [[ -d "$INSTALL_DIR/.git" ]]; then
-  git -C "$INSTALL_DIR" fetch --depth=1 origin main
-  git -C "$INSTALL_DIR" reset --hard origin/main
+  git -C "$INSTALL_DIR" pull --ff-only
 else
   rm -rf "$INSTALL_DIR"
   git clone --depth 1 --branch main "$REPO_URL" "$INSTALL_DIR"
