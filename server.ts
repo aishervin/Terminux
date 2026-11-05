@@ -799,20 +799,24 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
 
     const messages: any[] = [{ role: 'system', content: SYSTEM_PROMPT }];
     let toolSequence = 0;
+    const pendingToolIds: string[] = [];
     for (const item of historyList) {
       const role = item.role === 'model' || item.role === 'assistant' ? 'assistant' : 'user';
       const parts = Array.isArray(item.parts) ? item.parts : [];
-      const calls = parts.filter((p: any) => p?.functionCall).map((p: any) => ({
-        id: 'call_' + (++toolSequence), type: 'function',
-        function: { name: p.functionCall.name, arguments: JSON.stringify(p.functionCall.args || {}) }
-      }));
+      const calls = parts.filter((p: any) => p?.functionCall).map((p: any) => {
+        const id = 'call_' + (++toolSequence);
+        pendingToolIds.push(id);
+        return { id, type: 'function', function: {
+          name: p.functionCall.name, arguments: JSON.stringify(p.functionCall.args || {})
+        }};
+      });
       const responses = parts.filter((p: any) => p?.functionResponse);
       const content = parts.filter((p: any) => typeof p?.text === 'string').map((p: any) => p.text).join('\\n');
       if (role === 'assistant') {
         if (calls.length) messages.push({ role: 'assistant', content: content || null, tool_calls: calls });
         else if (content || item.content) messages.push({ role: 'assistant', content: content || item.content });
       } else if (responses.length) {
-        for (const part of responses) messages.push({ role: 'tool', tool_call_id: 'call_' + (++toolSequence), name: part.functionResponse.name, content: JSON.stringify(part.functionResponse.response ?? {}) });
+        for (const part of responses) messages.push({ role: 'tool', tool_call_id: pendingToolIds.shift() || 'call_missing', name: part.functionResponse.name, content: JSON.stringify(part.functionResponse.response ?? {}) });
       } else {
         const userContent = content || (typeof item.content === 'string' ? item.content : '');
         if (userContent) messages.push({ role: 'user', content: userContent });
