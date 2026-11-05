@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =========================================================
-#  Terminux â one-line installer for Termux
+#  Terminux — one-line installer for Termux
 #  bash <(curl -fsSL https://raw.githubusercontent.com/aishervin/Terminux/main/install.sh)
 # =========================================================
 set -e
@@ -22,22 +22,103 @@ cat << 'LOGO'
   |_   _| ____|  _ \|  \/  |_ _| \ | | | | \ \/ /
     | | |  _| | |_) | |\/| || ||  \| | | | |\  /
     | | | |___|  _ <| |  | || || |\  | |_| |/  \
-    |_| |____|_| \_\Wßß××ßßß×××ËË×Ë××ËÂÑÓÂ[ÔH[	ÐU\Z[^	ÔH	Ñx ,ÈØØ[RHYÙ[Ü\]^	ÔW[	ÑYÚ]XÛÛKØZ\Ú\[Õ\Z[^	ÔWÕTLÝ]\Ê
-HÂÕTI
+    |_| |_____|_| \_\_|  |_|___|_| \_|____//_/_\_/
+LOGO
+printf "${R}"
+printf "  ${B}Terminux${R} ${D}· local AI agent for Termux${R}\n"
+printf "  ${D}github.com/aishervin/Terminux${R}\n\n"
 
-ÕT
-ÌJJBØØ[\ÙÏHHØØ[ÝI
+STEP=0
+status() {
+  STEP=$((STEP+1))
+  local msg="$1"
+  local pct=$((STEP*100/TOTAL))
+  local width=22
+  local filled=$((STEP*width/TOTAL))
+  local bar=""
+  local i
+  for ((i=0; i<filled; i++)); do bar+="█"; done
+  for ((i=filled; i<width; i++)); do bar+="·"; done
+  printf "\r\033[K  ${Y}%s${R} ${B}%s${R} ${D}%3d%%${R}" "$bar" "$msg" "$pct"
+}
 
-ÕT
-LÕÕS
-JBØØ[ÚYLØØ[[YI
+# 1/5 — environment
+status "updating environment"
+if command -v pkg >/dev/null 2>&1; then
+  pkg update -y >/dev/null 2>&1 || true
+  pkg install -y nodejs-lts git termux-api xdg-utils >/dev/null 2>&1 || true
+fi
 
-ÕT
-ÚYÕÕS
-JBØØ[\HØØ[BÜ
+# 2/5 — source code
+status "syncing source code"
+if [ -d "$INSTALL_DIR/.git" ]; then
+  git -C "$INSTALL_DIR" pull --ff-only >/dev/null 2>&1 || true
+else
+  rm -rf "$INSTALL_DIR"
+  git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" >/dev/null 2>&1
+fi
 
-OLÈO[YÈJÊÊJNÈÈ\ÏH¸¥¡ÈÛBÜ
+# 3/5 — dependencies
+status "installing dependencies"
+if ! command -v npm >/dev/null 2>&1; then
+  echo ""
+  echo "  npm not found — install Node.js first:  pkg install nodejs-lts"
+  exit 1
+fi
+npm install --omit=dev --no-audit --no-fund >/dev/null 2>&1
 
-OY[YÈOÚYÈJÊÊJNÈÈ\ÏH¸ ,ÈÈÛB[ÌÖÒövGµÒW2Gµ'ÒG´'ÒW2Gµ'ÒG´GÒS6BRWµ'Ò""F&"""F×6r""G7B §Ð ¢2r(	BVçf&öæÖVç@§7FGW2'WFFærVçf&öæÖVçB ¦b6öÖÖæB×b¶râöFWböçVÆÂ#âc²FVà¢¶rWFFR×âöFWböçVÆÂ#âcÇÂG'VP¢¶rç7FÆÂ×æöFV§2ÖÇG2vBFW&×WÖFr×WFÇ2âöFWböçVÆÂ#âcÇÂG'VP¦f ¢2(b¥B6÷W&6R6öFP§7FGW2'7æ6ær6÷W&6R6öFR ¦b²ÖB"Då5DÄÅôD"òævB"Ó²FVà¢vBÔ2"Då5DÄÅôD""VÆÂÒÖfbÖöæÇâöFWböçVÆÂ#âcÇÂG'VP¦VÇ6P¢&Ò×&b"Då5DÄÅôD" ¢vB6ÆöæRÒÖFWF"E$UõõU$Â""Då5DÄÅôD""âöFWböçVÆÂ#âc¦f ¢22ÒÒÒFWVæFVæ6W0§7FGW2&ç7FÆÆærFWVæFVæ6W2 ¦b6öÖÖæB×bçÒâöFWböçVÆÂ#âc²FVà¢V6ò" ¢V6ò"çÒæ÷Bf÷VæB(	Bç7FÆÂæöFRæ§2f'7C¢¶rç7FÆÂæöFV§2ÖÇG2 ¢WB¦f¦çÒç7FÆÂÒÖöÖCÖFWbÒÖæòÖVFBÒÖæòÖgVæBâöFWböçVÆÂ#âc ¢2BóR(	BÆVæ6W"6÷'F7W@§7FGW2&7&VFærÆVæ6W" ¥$Tdô$ãÒ"öFFöFFö6öÒçFW&×WöfÆW2÷W7"ö&â ¥²ÖB"E$Tdô$â"ÒÇÂ$Tdô$ãÒ"÷W7"öÆö6Âö&â ¤ÄTä4U%ô4ÔCÒ&çÒ7F'B ¦bÖ¶F"×"E$Tdô$â"#âöFWböçVÆÂbb²×r"E$Tdô$â"Ó²FVà¢6BÃÂTôbâ"E$Tdô$â÷FW&ÖçW ¢2÷W7"ö&âöVçb&6¦W÷'BDU$ÔåUõtõ$µ54SÒ"Etõ$µ54UôD" ¦Ö¶F"×%ÂEDU$ÔåUõtõ$µ54R ¦6B"Då5DÄÅôD" ¦WV2çÒ7F'@¤Tô`¢6ÖöB·"E$Tdô$â÷FW&ÖçW ¢ÄTä4U%ô4ÔCÒ'FW&ÖçW ¦f ¢2RóR(	Bv÷&·76P§7FGW2'&W&ærv÷&·76R ¦Ö¶F"×"Etõ$µ54UôD"  ¤$#Ò" ¦f÷"Ó²Ã##²²²²Fò$"³Ò.)hB#²FöæP§&çFb%Ç%Ã35´²GµÒW2Gµ'ÒG´wÒG´'×&VGGµ'ÒG´GÓRRGµ'ÕÆâ""D$" ¦V6ò" §&çFb"G´wÞ)ÉBGµ'ÒG´GÒW2Gµ'ÕÆâ""Då5DÄÅôD" §&çFb"G´wÞ)ÉBGµ'Òv÷&·76RG´GÒW2Gµ'ÕÆâ""Etõ$µ54UôD" §&çFb"G´wÞ)ÉBGµ'ÒÆVæ6W"G´GÒW2Gµ'ÕÆâ""DÄTä4U%ô4ÔB §&çFb"G´wÞ)ÉBGµ'ÒçFW&f6RG´GÖGG¢òöÆö6Æ÷7C£3Gµ'ÕÆâ ¦V6ò"  ¢2&r6÷VçFF÷vâ&Vf÷&Rf'7BÆVæ6§&çFb%Ã35·2 ¦f÷"âRB2"²Fð¢&çFb%Ã35·RG´7Ò ¢66RFà¢&çFb")h)hÆâ)h)hÆâ)h)hÆâ)h)hÆâ)h)hÆâ#³°¢"&çFb")h)h)h)h)hÆâ)h)hÆâ)h)h)h)h)hÆâ)h)hÆâ)h)h)h)h)h)hÆâ#³°¢2&çFb")h)h)h)h)hÆâ)h)hÆâ)h)h)h)h)hÆâ)h)hÆâ)h)h)h)h)hÆâ#³°¢B&çFb")h)h)h)hÆâ)h)h)h)hÆâ)h)h)h)h)hÆâ)h)hÆâ)h)hÆâ#³°¢R&çFb")h)h)h)h)hÆâ)h)hÆâ)h)h)h)h)hÆâ)h)hÆâ)h)h)h)h)hÆâ#³°¢W60¢&çFb"Gµ'ÒG´GÖ÷Væær'&÷w6W"âGµ'ÒG´'ÒGµÒVBGµ'ÒG´G×6V2(
-bGµ'ÕÆâ""F ¢6ÆVW¦FöæP§&çFb%Ã35·UÃ35´¢ §&çFb"G´wÒG´'×7F'FærFW&ÖçW(
-bGµ'ÕÆåÆâ  ¢2ÆVæ6¦6B"Då5DÄÅôD" ¦W÷'BDU$ÔåUõtõ$µ54SÒ"Etõ$µ54UôD" ¦b6öÖÖæB×bFW&×WÖ÷Vâ×W&ÂâöFWböçVÆÂ#âc²FVà¢6ÆVW2bbFW&×WÖ÷Vâ×W&ÂGG¢òöÆö6Æ÷7C£3âöFWböçVÆÂ#âc`¦f¦WV2çÒ7F'@ 
+# 4/5 — launcher shortcut
+status "creating launcher"
+PREFIX_BIN="/data/data/com.termux/files/usr/bin"
+[ -d "$PREFIX_BIN" ] || PREFIX_BIN="/usr/local/bin"
+LAUNCHER_CMD="npm start"
+if mkdir -p "$PREFIX_BIN" 2>/dev/null && [ -w "$PREFIX_BIN" ]; then
+  cat << EOF > "$PREFIX_BIN/terminux"
+#!/usr/bin/env bash
+export TERMINUX_WORKSPACE="$WORKSPACE_DIR"
+mkdir -p "\$TERMINUX_WORKSPACE"
+cd "$INSTALL_DIR"
+exec npm start
+EOF
+  chmod +x "$PREFIX_BIN/terminux"
+  LAUNCHER_CMD="terminux"
+fi
+
+# 5/5 — workspace
+status "preparing workspace"
+mkdir -p "$WORKSPACE_DIR"
+
+BAR=""
+for ((i=0; i<22; i++)); do BAR+="█"; done
+printf "\r\033[K  ${Y}%s${R} ${G}${B}ready${R} ${D}100%%${R}\n" "$BAR"
+echo ""
+printf "  ${G}✔${R} app        ${D}%s${R}\n" "$INSTALL_DIR"
+printf "  ${G}✔${R} workspace  ${D}%s${R}\n" "$WORKSPACE_DIR"
+printf "  ${G}✔${R} launcher   ${D}%s${R}\n" "$LAUNCHER_CMD"
+printf "  ${G}✔${R} interface  ${D}http://localhost:3000${R}\n"
+echo ""
+
+# big countdown before first launch
+printf "\033[s"
+for i in 5 4 3 2 1; do
+  printf "\033[u${C}"
+  case $i in
+    1) printf "     ██ \n     ██ \n     ██ \n     ██ \n     ██ \n";;
+    2) printf " █████ \n     ██\n █████ \n ██    \n ██████\n";;
+    3) printf " █████ \n     ██\n █████ \n     ██\n █████ \n";;
+    4) printf " ██  ██\n ██  ██\n █████ \n     ██\n     ██\n";;
+    5) printf " █████ \n ██    \n █████ \n     ██\n █████ \n";;
+  esac
+  printf "${R}  ${D}opening browser in${R} ${B}${Y}%d${R} ${D}sec …${R}\n" "$i"
+  sleep 1
+done
+printf "\033[u\033[J"
+printf "  ${G}${B}starting Terminux …${R}\n\n"
+
+# launch
+cd "$INSTALL_DIR"
+export TERMINUX_WORKSPACE="$WORKSPACE_DIR"
+if command -v termux-open-url >/dev/null 2>&1; then
+  ( sleep 3 && termux-open-url http://localhost:3000 >/dev/null 2>&1 ) &
+fi
+exec npm start
