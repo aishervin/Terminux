@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#000000">
+<title>Terminux</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Vazirmatn:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:dark;--ink:#dfe2e6;--dim:#6f757d;--line:#23262b;--ok:#9fe3b4;--red:#ff8f8f;--ice:#8cc8f5;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--fa:"Vazirmatn","JetBrains Mono",Tahoma,sans-serif}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:#000;color:var(--ink);font-family:var(--fa);-webkit-tap-highlight-color:transparent}
+body{display:flex;flex-direction:column;overflow:hidden;padding-top:env(safe-area-inset-top,0px)}
+button,input,textarea{font:inherit;color:inherit}[hidden]{display:none!important}
+/* stage: big logo that becomes the blurred backdrop */
+.stage{position:fixed;inset:0;z-index:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;pointer-events:none;transition:filter .8s ease,opacity .8s ease,transform 1s ease}
+.logo{position:relative;width:min(50vw,200px);aspect-ratio:1}
+.logo svg{width:100%;height:100%;overflow:visible;filter:drop-shadow(0 0 26px rgba(190,200,215,.16)) drop-shadow(0 18px 18px rgba(0,0,0,.9))}
+.floor{position:absolute;left:50%;bottom:-26px;width:120%;height:34px;transform:translateX(-50%);background:radial-gradient(closest-side,rgba(200,210,225,.2),transparent);filter:blur(6px);animation:breathe 5s ease-in-out infinite}
+@keyframes breathe{50%{opacity:.55;transform:translateX(-50%) scaleX(.9)}}
+.sweep{animation:sweep 4.6s cubic-bezier(.45,.05,.35,1) infinite}@keyframes sweep{0%{transform:translateX(-120px)}55%,100%{transform:translateX(300px)}}
+.base{animation:drift 9s ease-in-out infinite alternate}@keyframes drift{to{transform:translate(-14px,10px)}}
+.ttl{text-align:center;font:300 13px/1.9 var(--fa);color:var(--dim);transition:opacity .4s}.ttl b{display:block;font:500 15px var(--mono);letter-spacing:.3em;color:var(--ink)}
+body.menu-open .stage{filter:blur(18px) brightness(.55)}
+body.chatting .stage{filter:blur(28px) brightness(.85);opacity:.5;transform:scale(1.8)}body.chatting .ttl{opacity:0}
+body.chatting.menu-open .stage{filter:blur(34px) brightness(.4)}
+body.menu-open #feed{filter:blur(8px);opacity:.35}
+/* top bar */
+.top{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:14px 20px;font:400 12px/1 var(--mono);color:var(--dim)}
+.state{display:flex;align-items:center;gap:8px}.activity{max-width:46vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok);animation:pulse 2.4s ease-in-out infinite}.dot.busy{background:#e4e7eb;box-shadow:0 0 10px #e4e7eb;animation-duration:.8s}
+@keyframes pulse{50%{opacity:.35}}
+/* feed with delicate top/bottom fades */
+#feed{position:relative;z-index:1;flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:14px;padding:24px max(16px,calc((100% - 760px)/2)) 60px;scrollbar-width:thin;scrollbar-color:#333 transparent;transition:filter .5s,opacity .5s;
+mask-image:linear-gradient(to bottom,transparent 0%,black 25px,black calc(100% - 45px),transparent 100%);
+-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 25px,black calc(100% - 45px),transparent 100%)}
+.notice{align-self:center;color:var(--dim);font-size:12px}
+.message,.command-card,.tool-output,.live-terminal{position:relative;box-sizing:border-box;clip-path:polygon(12px 0,calc(100% - 12px) 0,100% 12px,100% calc(100% - 12px),calc(100% - 12px) 100%,12px 100%,0 calc(100% - 12px),0 12px);animation:rise .4s cubic-bezier(.2,.7,.2,1) both;transition:border-color .2s,box-shadow .2s}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}}
+.message{padding:14px 18px 10px;line-height:1.95;overflow-wrap:anywhere}
+
+/* User wireframe card: no solid bg, thin silver wireframe border */
+.message.user{align-self:flex-start;max-width:88%;background:transparent!important;border:1px solid rgba(225,232,242,.45)!important;box-shadow:0 0 16px rgba(220,230,245,.08),inset 0 0 8px rgba(255,255,255,.03)!important;color:#e6ebf3}
+.message.user .message-label{color:#aab0bb;font-weight:600;letter-spacing:.16em}
+
+/* Assistant wireframe card: no solid bg, thin aqua wireframe border */
+.message.assistant{align-self:stretch;background:transparent!important;border:1px solid rgba(100,210,255,.5)!important;box-shadow:0 0 20px rgba(80,200,255,.12),inset 0 0 10px rgba(100,210,255,.04)!important;color:#e8f6ff}
+.message.assistant .message-label{color:var(--ice);font-weight:600;letter-spacing:.16em;text-shadow:0 0 8px rgba(140,200,255,.6)}
+
+/* Exception cards with blurred frosted glass background */
+.message.error{align-self:stretch;background:rgba(42,12,14,.75)!important;backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,100,100,.45)!important;box-shadow:0 10px 30px rgba(0,0,0,.6);color:#ffd8d8}
+.cb,.command-card,.tool-output,.live-terminal{background:rgba(12,15,20,.85)!important;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,.14)!important;box-shadow:0 12px 35px rgba(0,0,0,.65)}
+
+.message-label{font:500 10px var(--mono);letter-spacing:.14em;direction:ltr;text-align:left;margin-bottom:8px;opacity:.85}
+.message-body{white-space:pre-wrap;unicode-bidi:plaintext;font-size:14px;line-height:1.9}.message-body+.cb,.cb+.message-body{margin-top:10px}
+.ic{font:12.5px var(--mono);background:rgba(0,0,0,.45);padding:2px 7px;border-radius:6px;direction:ltr;unicode-bidi:isolate;color:#c3e88d;border:1px solid rgba(255,255,255,.08)}
+.message-files{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.file-link{display:flex;align-items:center;gap:8px;padding:6px 9px;border:1px solid rgba(255,255,255,.15);border-radius:10px;color:inherit;text-decoration:none;font-size:12px;background:rgba(0,0,0,.3)}.file-link img{width:40px;height:40px;object-fit:cover;border-radius:6px}
+
+/* Micro-iconic Footer Actions on Cards */
+.msg-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:6px;padding-top:4px;border-top:1px solid rgba(255,255,255,.05)}
+.msg-act-icon-btn{all:unset;box-sizing:border-box;cursor:pointer;position:relative;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;color:#7e8693;background:transparent;border:0;border-radius:4px;transition:all .2s cubic-bezier(.2,.8,.2,1)}
+.msg-act-icon-btn svg{width:14px;height:14px;stroke:currentColor;fill:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,.6));transition:transform .2s,stroke .2s,filter .2s}
+.msg-act-icon-btn:hover{color:#fff;transform:translateY(-1px)}
+.msg-act-icon-btn:hover svg{transform:scale(1.22);filter:drop-shadow(0 0 8px rgba(180,220,255,.85))}
+.msg-act-icon-btn.copied{color:var(--ok)!important}
+.msg-act-icon-btn.copied svg{stroke:var(--ok)!important;filter:drop-shadow(0 0 8px var(--ok))!important}
+
+/* Sandbox-style code */
+.cb{position:relative;margin:12px 0;border-radius:0;overflow:hidden}
+.cb-head{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(0,0,0,.5);border-bottom:1px solid rgba(255,255,255,.08);font:500 11px var(--mono);color:#8d949f;direction:ltr}
+.cb-lang{text-transform:uppercase;letter-spacing:.12em;color:#8cc8f5;font-weight:700}
+.cb-tools{display:flex;align-items:center;gap:8px}
+.cb-btn{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;color:#8a919d;background:transparent;border:0;border-radius:3px;transition:all .2s}
+.cb-btn svg{width:13px;height:13px;stroke:currentColor;fill:none;transition:transform .2s,stroke .2s,filter .2s}
+.cb-btn:hover{color:#fff}.cb-btn:hover svg{transform:scale(1.2);filter:drop-shadow(0 0 6px rgba(255,255,255,.8))}
+.cb-btn.copied{color:var(--ok)!important}.cb-btn.copied svg{stroke:var(--ok)!important;filter:drop-shadow(0 0 8px var(--ok))!important}
+
+.cb pre,.command-code,.log-text,.live-term-text{margin:0;padding:14px 16px;font:12.5px/1.8 var(--mono);color:#d6deeb;background:transparent;direction:ltr;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere}
+.log-text{max-height:46vh;overflow:auto}
+.k{color:#c792ea}.s{color:#c3e88d}.n{color:#f78c6c}.c{color:#637777;font-style:italic}.f{color:#82aaff}.v{color:#f07178}.o{color:#ffcb6b}.e{color:#f07178}.w{color:#ffcb6b}
+
+/* Live Terminal Component */
+.live-terminal{margin:10px 0;overflow:hidden}
+.live-term-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.08);font:500 11px var(--mono);color:var(--ok);direction:ltr}
+.live-term-title{display:flex;align-items:center;gap:8px}
+.live-term-dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok);animation:pulse .8s ease-in-out infinite}
+.live-term-text{max-height:240px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#444 transparent;color:#88e2a8}
+.term-cursor{display:inline-block;width:8px;height:15px;background:var(--ok);margin-inline-start:3px;vertical-align:middle;animation:blink 1s steps(2,start) infinite}
+@keyframes blink{50%{opacity:0}}
+
+.command-card,.tool-output{overflow:hidden}
+.command-head,.tool-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 15px;font-size:12px;color:#bfc5cc;border-bottom:1px solid rgba(255,255,255,.08)}
+.command-actions,.log-actions{display:flex;gap:8px;padding:10px 12px;border-top:1px solid rgba(255,255,255,.08)}
+.tool-state{color:var(--ok)}.tool-state.fail{color:var(--red)}.log-meta{font:11px var(--mono);color:var(--dim);direction:ltr;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.action{cursor:pointer;border:1px solid #2f3339;background:#ffffff06;color:#b8bec6;padding:7px 14px;font-size:12px;clip-path:polygon(8px 0,calc(100% - 8px) 0,100% 8px,100% calc(100% - 8px),calc(100% - 8px) 100%,8px 100%,0 calc(100% - 8px),0 8px)}
+.action:hover{color:#fff;border-color:#6b7078}.action.primary{background:linear-gradient(135deg,#f1f3f5,#9aa0a8 55%,#d5d9de);border:0;color:#060606;font-weight:500}.action.reject{color:var(--red)}.action:disabled{opacity:.45;cursor:default}
+
+/* Live Code Preview Dialog */
+.code-preview-dialog{width:min(1100px,calc(100% - 20px));height:min(88dvh,820px);overflow:hidden}
+.code-preview-layout{height:100%;display:grid;grid-template-rows:48px 1fr}
+.preview-head-bar{display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--line);background:#000}
+.preview-title-tag{display:flex;align-items:center;gap:8px;font:500 13px var(--mono);color:var(--ice)}
+.preview-iframe-host{width:100%;height:100%;background:#fff;border:0}
+/* dock: capsule + rail */
+.dock{position:relative;z-index:3;width:min(100%,640px);margin:0 auto;padding:6px 20px calc(14px + env(safe-area-inset-bottom,0px))}
+.selected-files{display:flex;flex-wrap:wrap;gap:7px;padding:0 2px 8px}.selected-files:empty{display:none}
+.attachment-chip{display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:rgba(0,0,0,.5);padding:4px 9px;color:var(--dim);font-size:11px}.attachment-chip img{width:26px;height:26px;object-fit:cover}.attachment-chip button{all:unset;cursor:pointer;padding:0 3px}
+.upload-note{display:block;color:var(--dim);font-size:11px;padding:0 4px 6px}.upload-note:empty{display:none}
+.cap,.cap-in{--c:16px;clip-path:polygon(var(--c) 0,calc(100% - var(--c)) 0,100% var(--c),100% calc(100% - var(--c)),calc(100% - var(--c)) 100%,var(--c) 100%,0 calc(100% - var(--c)),0 var(--c))}
+.cap{position:relative;padding:1px;background:linear-gradient(135deg,#5b6068,#16181b 40%,#3a3e44 70%,#7b8088)}.cap:focus-within{background:linear-gradient(135deg,#aeb4bd,#2a2d32 40%,#6b7078 70%,#d6dae0)}
+.cap-in{display:flex;align-items:center;gap:8px;min-height:62px;padding:9px 10px;padding-inline-start:9px;background:#0a0b0c}
+#prompt{flex:1;min-width:0;min-height:38px;resize:none;border:0;outline:0;background:none;font:400 14.5px/1.75 var(--fa);padding:5px 2px;max-height:38vh;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 transparent;caret-color:#cfd4da;text-align:right;direction:rtl;unicode-bidi:plaintext}
+#prompt::placeholder{color:#555a62;font-weight:300;direction:rtl;text-align:right}
+.clip{position:relative;flex:none;width:34px;height:34px;display:grid;place-items:center;color:#8a9098;cursor:pointer;overflow:hidden}.clip:hover{color:#fff}.clip input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.send{all:unset;box-sizing:border-box;position:relative;flex:none;width:38px;height:38px;display:grid;place-items:center;cursor:pointer;overflow:hidden;background:linear-gradient(135deg,#f4f6f8,#8d939b 45%,#cfd3d9 70%,#5b6168);color:#060606;font:700 14px var(--mono);direction:ltr;clip-path:polygon(11px 0,calc(100% - 11px) 0,100% 11px,100% calc(100% - 11px),calc(100% - 11px) 100%,11px 100%,0 calc(100% - 11px),0 11px);transition:filter .2s,transform .2s}
+.send:hover:not(:disabled){filter:brightness(1.12)}.send:active:not(:disabled){transform:scale(.94)}.send:disabled{filter:grayscale(1) brightness(.5);cursor:default}
+.send::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.85) 50%,transparent 70%);transform:translateX(-120%);opacity:0}
+.send.busy,.send.busy:disabled{filter:none;cursor:progress}.send.busy::after{opacity:1;animation:shine 1.3s linear infinite}@keyframes shine{to{transform:translateX(120%)}}
+/* drag to run & neon orange approval mode */
+.drag-container{position:relative;display:flex;align-items:center;gap:8px;flex:none;z-index:5}
+.send.approval-mode{background:linear-gradient(135deg,#ffb300,#ff3d00 55%,#ff8800)!important;color:#000!important;box-shadow:0 0 18px rgba(255,100,0,.9),0 0 34px rgba(255,60,0,.55)!important;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;transition:filter .2s,box-shadow .2s}
+.send.approval-mode:active{cursor:grabbing}
+.send.blinking{background:linear-gradient(135deg,#ffb300,#ff3d00 55%,#ff8800)!important;color:#000!important;animation:orangePulse .75s ease-in-out infinite alternate!important;cursor:progress}
+@keyframes orangePulse{0%{opacity:1;filter:drop-shadow(0 0 8px #ff5500) brightness(1.25);box-shadow:0 0 24px rgba(255,80,0,.95)}100%{opacity:.3;filter:drop-shadow(0 0 26px #ff9900) brightness(.8);box-shadow:0 0 6px rgba(255,140,0,.25)}}
+.drag-hint{pointer-events:none;display:flex;align-items:center;gap:6px;font:700 12px/1 var(--mono);letter-spacing:.08em;background:linear-gradient(90deg,#ff4500 0%,#ffaa00 35%,#ffffff 50%,#ffaa00 65%,#ff4500 100%);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:dragGlow 1.8s linear infinite;filter:drop-shadow(0 0 8px rgba(255,120,0,.7));transition:opacity .15s ease-out;z-index:6}
+.drag-arrows{display:inline-block;animation:arrowPulse 1.2s ease-in-out infinite alternate}
+@keyframes dragGlow{0%{background-position:0% center}100%{background-position:200% center}}
+@keyframes arrowPulse{0%{transform:translateX(0);opacity:.6}100%{transform:translateX(-5px);opacity:1}}
+/* tts toggle in the top bar */
+.speak-toggle{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:3px 10px;font:400 10px var(--mono);letter-spacing:.18em;color:#8a9098;background:#0a0b0c;border:1px solid #2c3036;clip-path:polygon(7px 0,calc(100% - 7px) 0,100% 7px,100% calc(100% - 7px),calc(100% - 7px) 100%,7px 100%,0 calc(100% - 7px),0 7px);transition:.2s}
+.speak-toggle:hover{color:#fff}
+.speak-toggle.on{color:var(--ok);border-color:#33543f}
+/* model chip on the top edge of the input capsule */
+.model-row{display:flex;align-items:center;justify-content:flex-end;min-height:24px;padding:0 12px;margin:0 0 6px}
+.model-chip{all:unset;box-sizing:border-box;position:relative;z-index:4;cursor:pointer;display:inline-flex;align-items:center;gap:6px;max-width:100%;min-height:22px;padding:2px 4px;font:500 11px var(--mono);letter-spacing:.04em;color:#ff7700;background:transparent;border:0;transition:filter .2s,color .2s}
+.model-chip:hover{filter:brightness(1.25)}
+.model-chip b{font:500 11px var(--mono);letter-spacing:.04em;color:#ff7700;text-shadow:0 0 8px rgba(255,119,0,0.75),0 0 2px #ff8800;max-width:52vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr}
+.rail{display:flex;justify-content:center;align-items:center;gap:16px;margin-top:10px;overflow-x:auto;scrollbar-width:none;padding:6px 0 10px;-webkit-mask-image:linear-gradient(to right,transparent,#000 15px,#000 calc(100% - 15px),transparent);mask-image:linear-gradient(to right,transparent,#000 15px,#000 calc(100% - 15px),transparent)}.rail::-webkit-scrollbar{display:none}
+.rail-btn{all:unset;box-sizing:border-box;position:relative;cursor:pointer;flex:none;display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;background:transparent;border:0;transition:transform .3s cubic-bezier(.2,.8,.2,1),filter .3s}
+.rail-btn svg{width:22px;height:22px;stroke:url(#silverGrad);fill:none;filter:drop-shadow(0 2px 5px rgba(0,0,0,0.85));transition:transform .25s,filter .25s}
+.rail-btn::after{content:"";position:absolute;bottom:0px;left:50%;width:60%;height:5px;transform:translateX(-50%);background:radial-gradient(ellipse at center,rgba(230,240,255,.55) 0%,rgba(160,185,220,.2) 50%,transparent 80%);border-radius:50%;filter:blur(3px);opacity:.45;animation:railBreathe 4s ease-in-out infinite alternate;transition:opacity .3s,width .3s,height .3s,background .3s}
+.rail-btn:hover::after,.rail-btn.on::after{opacity:1;width:92%;height:7px;background:radial-gradient(ellipse at center,rgba(255,255,255,.9) 0%,rgba(180,215,250,.4) 50%,transparent 80%);filter:blur(4px)}
+.rail-btn:hover{transform:translateY(-3px);filter:drop-shadow(0 0 10px rgba(220,230,245,.75))}
+.rail-btn.on{transform:translateY(-4px);filter:drop-shadow(0 0 14px rgba(255,255,255,.95))}
+.rail-btn:hover svg,.rail-btn.on svg{transform:scale(1.1)}
+@keyframes railBreathe{0%{transform:translateX(-50%) scaleX(.8);opacity:.4}100%{transform:translateX(-50%) scaleX(1.2);opacity:.85}}
+/* menu: simple line list centered over the blurred page */
+.menu{position:fixed;inset:0;z-index:2;display:none;align-items:center;justify-content:center;padding:70px 24px 190px;background:rgba(0,0,0,.25)}.menu.open{display:flex;animation:fade .3s ease}@keyframes fade{from{opacity:0}}
+.mp{display:flex;flex-direction:column;width:min(100%,400px);max-height:100%}.mt{font:400 11px var(--mono);letter-spacing:.25em;color:var(--dim);padding:0 4px 10px;text-align:center;direction:ltr}
+.ml{overflow:auto;min-height:0;scrollbar-width:thin;scrollbar-color:#333 transparent;border-top:1px solid rgba(255,255,255,.08)}
+.mi{all:unset;box-sizing:border-box;cursor:pointer;display:flex;width:100%;align-items:center;gap:12px;padding:15px 4px;border-bottom:1px solid rgba(255,255,255,.08);color:#d3d7dc;font:300 14.5px/1.6 var(--fa)}
+.mi span{flex:1}.mi small{color:var(--dim);font-size:11.5px}.mi::after{content:"‹";color:#555a62}.mi.dead{cursor:default;color:var(--dim)}.mi.dead::after{content:""}.mi:hover:not(.dead),.mi:focus-visible{color:#fff}.mi:hover:not(.dead)::after{color:#fff}
+/* dialogs */
+dialog{border:1px solid #2c3036;border-radius:0;background:rgba(10,11,12,.94);backdrop-filter:blur(22px);color:var(--ink);padding:0;max-height:92dvh;box-shadow:0 30px 100px #000}dialog::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(10px)}
+.settings-dialog{width:min(560px,calc(100% - 24px));overflow:auto}.dialog-inner{padding:22px}.dialog-title{display:flex;align-items:center;justify-content:space-between;gap:12px}.dialog-inner h2,.files-title h2{margin:0;font:500 17px var(--fa)}
+.close-btn{border:1px solid var(--line);background:transparent;color:var(--dim);padding:5px 12px;cursor:pointer}.security-note{margin:11px 0 17px;color:var(--dim);font-size:11.5px;line-height:1.9}
+.field{margin:13px 0}.field>label:first-child{display:block;margin-bottom:6px;font-size:12px;color:#aab0b8}.field input:not([type=checkbox]){width:100%;border:1px solid var(--line);background:#000;padding:10px;direction:ltr;text-align:left;font:12px var(--mono)}.field input:focus{outline:1px solid #8f959d}
+.forget,.passline{display:flex;gap:7px;align-items:center;color:var(--dim);font-size:11px;margin-top:7px}input[type=checkbox]{accent-color:#c9ced5}.key-link{color:#c9ced5;font-size:11.5px;text-decoration:none}.dialog-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:20px}
+.files-dialog{width:min(1000px,calc(100% - 20px));height:min(82dvh,760px);overflow:hidden}.files-layout{height:100%;display:grid;grid-template-rows:52px 1fr}.files-title{padding:0 16px;border-bottom:1px solid var(--line)}.files-body{display:grid;grid-template-columns:minmax(220px,34%) 1fr;min-height:0}
+.file-sidebar{min-height:0;overflow:auto;border-inline-end:1px solid var(--line);padding:12px}.file-path{direction:ltr;text-align:left;font:11px var(--mono);color:var(--dim);padding:6px 4px 10px;overflow-wrap:anywhere}
+.file-entry{all:unset;box-sizing:border-box;cursor:pointer;width:100%;display:flex;gap:9px;align-items:center;padding:9px;font-size:12.5px;overflow-wrap:anywhere}.file-entry:hover{background:#ffffff0a;color:#fff}
+.preview-pane{min-width:0;min-height:0;display:grid;grid-template-rows:auto 1fr}.preview-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}.preview-title{font-size:12px}
+.preview-content{min-height:0;overflow:auto;display:grid;place-items:center;padding:16px}.preview-content img,.preview-content iframe{width:100%;height:100%;min-height:300px;object-fit:contain;border:0}.preview-content pre{align-self:stretch;width:100%;margin:0;white-space:pre-wrap;overflow-wrap:anywhere;direction:ltr;text-align:left;font:12px/1.65 var(--mono);color:#e2ddd7}.preview-empty{color:var(--dim);font-size:12px;text-align:center;line-height:1.8}
+@media(max-width:680px){.files-body{grid-template-columns:1fr;grid-template-rows:minmax(150px,36%) 1fr}.file-sidebar{border-inline-end:0;border-bottom:1px solid var(--line)}.message.user{max-width:96%}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+<div class="stage" aria-hidden="true">
+  <div class="logo"><svg viewBox="0 0 200 200" aria-label="Terminux"><defs>
+<linearGradient id="silver" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f4f6f8"/><stop offset=".28" stop-color="#8d939b"/><stop offset=".5" stop-color="#d7dbe0"/><stop offset=".74" stop-color="#5b6168"/><stop offset="1" stop-color="#b9bec5"/></linearGradient>
+<linearGradient id="silverGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".28" stop-color="#a0a6b2"/><stop offset=".55" stop-color="#e8ecf2"/><stop offset=".8" stop-color="#727883"/><stop offset="1" stop-color="#c5cbd4"/></linearGradient>
+<linearGradient id="beam" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".95"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<mask id="shape" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200"><g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round"><path d="M44 18H156L182 44V156L156 182H44L18 156V44Z" stroke-width="9"/><path d="M56 72L98 100L56 128" stroke-width="12"/><path d="M110 134H148" stroke-width="12"/></g></mask></defs>
+<g mask="url(#shape)"><rect class="base" x="-20" y="-20" width="240" height="240" fill="url(#silver)"/><g transform="rotate(16 100 100)"><path class="sweep" fill="url(#beam)" d="M0 -40C34 20 -30 70 0 120S34 200 0 250L52 250C86 200 22 160 52 120S86 20 52 -40Z"/></g></g></svg><div class="floor"></div></div>
+  <div class="ttl"><b>™TERMINUX</b>  از تـرموکسـ نترس ! </div>
+</div>
+
+<header class="top">
+  <span dir="ltr"> SHΞN™🛡️core </span>
+  <button class="speak-toggle" id="speakToggle" type="button" dir="ltr" hidden aria-label="خواندن پاسخ‌ها با صدا">TTS · OFF</button>
+  <span class="state"><span class="activity" id="activity"></span><span id="statusText">در حال اتصال…</span><span class="dot" id="statusDot"></span></span>
+</header>
+
+<section id="feed" aria-live="polite"><div id="welcome" hidden></div></section>
+
+<div class="menu" id="menu"><div class="mp"><div class="mt" id="menuTitle"></div><div class="ml" id="menuList"></div></div></div>
+
+<footer class="dock">
+  <div class="selected-files" id="selectedFiles"></div>
+  <span class="upload-note" id="uploadNote"></span>
+  <div class="model-row"><button class="model-chip" id="modelChip" type="button" dir="ltr" aria-label="انتخاب مدل"><b id="modelChipName">…</b></button></div>
+  <div class="cap"><div class="cap-in">
+    <div class="drag-container" id="dragContainer">
+      <button class="send" id="sendButton" type="button" aria-label="ارسال">&gt;_</button>
+      <div class="drag-hint" id="dragHint" dir="ltr" hidden aria-hidden="true"><span class="drag-arrows">&lt;&lt;&lt;</span><span class="drag-text">Drag to Run</span></div>
+    </div>
+    <textarea id="prompt" rows="1" dir="rtl" placeholder="تو اشاره کن، من رنده‌ش می‌کنم..." aria-label="پیام به ایجنت"></textarea>
+    <label class="clip" aria-label="پیوست فایل"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5l-8.6 8.6a5 5 0 01-7-7l9-9a3.3 3.3 0 014.7 4.7l-9 9a1.7 1.7 0 01-2.4-2.4l8.3-8.3"/></svg><input type="file" id="fileInput" multiple aria-label="انتخاب فایل"></label>
+  </div></div>
+  <nav class="rail" id="rail" aria-label="منوها"></nav>
+</footer>
+
+<div hidden>
+  <button id="openFiles" type="button"></button><button id="newChat" type="button"></button><button id="openSettings" type="button"></button>
+  <input type="checkbox" id="autoApprove"><span id="githubStatus"></span><span id="cloudflareStatus"></span><span id="workspaceStatus"></span>
+</div>
+
+<dialog id="settingsDialog" class="settings-dialog">
+    <form class="dialog-inner" id="settingsForm">
+      <div class="dialog-title"><h2>تنظیمات</h2><button class="close-btn" type="button" id="cancelSettings">بستن</button></div>
+      <p class="security-note">کلیدها روی همین دستگاه ذخیره می‌شوند. فرمان‌های shell با دسترسی Termux اجرا می‌شوند؛ خروجی فرمان ممکن است به مدل برسد.</p>
+      <div class="field"><label for="apiKey">Gemini API key</label><input id="apiKey" type="password" autocomplete="off" placeholder="کلید Gemini، شامل قالب AQ.… یا قالب‌های قدیمی"><label class="forget"><input id="clearApiKey" type="checkbox"> پاک‌کردن کلید ذخیره‌شده</label></div>
+      <div class="field"><label for="model">مدل (انتخاب اصلی از دکمهٔ model روی چت)</label><input id="model" value="gemini-2.5-flash" spellcheck="false"></div>
+      <div class="field"><label for="mistralApiKey">Mistral API key</label><input id="mistralApiKey" type="password" autocomplete="off" placeholder="کلید Mistral"><a class="key-link" href="https://console.mistral.ai/api-keys" target="_blank" rel="noreferrer">دریافت کلید ↗</a><label class="forget"><input id="clearMistralApiKey" type="checkbox"> پاک‌کردن کلید ذخیره‌شده</label></div>
+      <div class="field"><label for="deepseekApiKey">DeepSeek API key</label><input id="deepseekApiKey" type="password" autocomplete="off" placeholder="کلید DeepSeek"><a class="key-link" href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">دریافت کلید ↗</a><label class="forget"><input id="clearDeepseekApiKey" type="checkbox"> پاک‌کردن کلید ذخیره‌شده</label></div>
+      <div class="field"><label for="openrouterApiKey">OpenRouter API key</label><input id="openrouterApiKey" type="password" autocomplete="off" placeholder="کلید OpenRouter"><a class="key-link" href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">دریافت کلید ↗</a><label class="forget"><input id="clearOpenrouterApiKey" type="checkbox"> پاک‌کردن کلید ذخیره‌شده</label></div>
+      <div class="field"><label for="githubToken">GitHub token</label><input id="githubToken" type="password" autocomplete="off" placeholder="توکن GitHub"><a class="key-link" href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noreferrer">تنظیم توکن ↗</a><label class="forget"><input id="clearGithubToken" type="checkbox"> پاک‌کردن توکن ذخیره‌شده</label></div>
+      <div class="field"><label for="cloudflareToken">Cloudflare token</label><input id="cloudflareToken" type="password" autocomplete="off" placeholder="توکن Cloudflare"><a class="key-link" href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noreferrer">تنظیم توکن ↗</a><label class="forget"><input id="clearCloudflareToken" type="checkbox"> پاک‌کردن توکن ذخیره‌شده</label></div>
+      <div class="field"><label for="linearApiKey">Linear API key</label><input id="linearApiKey" type="password" autocomplete="off" placeholder="کلید Linear"><a class="key-link" href="https://linear.app/settings/api" target="_blank" rel="noreferrer">دریافت کلید ↗</a><label class="forget"><input id="clearLinearApiKey" type="checkbox"> پاک‌کردن کلید ذخیره‌شده</label></div>
+      <div class="field"><label for="hfToken">Hugging Face token</label><input id="hfToken" type="password" autocomplete="off" placeholder="توکن Hugging Face (hf_…)"><a class="key-link" href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer">دریافت توکن ↗</a><label class="forget"><input id="clearHfToken" type="checkbox"> پاک‌کردن توکن ذخیره‌شده</label></div>
+      <div class="field"><label for="gmailAddress">Gmail · نشانی</label><input id="gmailAddress" autocomplete="off" placeholder="you@gmail.com"><label for="gmailAppPassword">رمز اپ Gmail</label><input id="gmailAppPassword" type="password" autocomplete="off" placeholder="رمز ۱۶-رقمی اپ (نه رمز حساب)"><a class="key-link" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">ساخت رمز اپ ↗</a><label class="forget"><input id="clearGmail" type="checkbox"> پاک‌کردن نشانی و رمز ذخیره‌شده</label></div>
+      <div class="field"><label for="driveClientId">Google Drive · OAuth Client ID</label><input id="driveClientId" autocomplete="off" placeholder="client_id از Google Cloud"><label for="driveClientSecret">OAuth Client Secret</label><input id="driveClientSecret" type="password" autocomplete="off" placeholder="client_secret"><label for="driveRefreshToken">Refresh Token</label><input id="driveRefreshToken" type="password" autocomplete="off" placeholder="refresh_token از OAuth Playground"><a class="key-link" href="https://developers.google.com/oauthplayground" target="_blank" rel="noreferrer">OAuth Playground ↗</a><label class="forget"><input id="clearDrive" type="checkbox"> پاک‌کردن تنظیمات Drive</label></div>
+      <div class="field"><label for="mcpServers">سرورهای MCP (JSON)</label><textarea id="mcpServers" rows="3" spellcheck="false" style="width:100%;border:1px solid var(--line);background:#000;padding:10px;direction:ltr;text-align:left;font:11px var(--mono)" placeholder='{"weather":{"command":"npx -y some-mcp-server"}}'></textarea><div style="font-size:10.5px;color:var(--dim);margin-top:6px">هر سرور: «نام»: {"command": "دستور اجرا"} — ابزارها از طریق mcp_call در دسترس ایجنت‌اند.</div></div>
+      <div class="field"><label class="passline"><input id="passTokensToShell" type="checkbox"> قراردادن توکن‌ها در دسترس gh و wrangler</label></div>
+      <div class="dialog-actions"><a class="key-link" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">Gemini API key ↗</a><div><button class="action primary" type="submit">ذخیره</button></div></div>
+    </form>
+  </dialog>
+
+  <dialog id="filesDialog" class="files-dialog">
+    <div class="files-layout">
+      <div class="dialog-title files-title"><h2>فایل‌ها</h2><button class="close-btn" type="button" id="closeFiles">بستن</button></div>
+      <div class="files-body">
+        <aside class="file-sidebar"><div class="file-path" id="filePath">.</div><div id="fileList"></div></aside>
+        <section class="preview-pane"><div class="preview-toolbar"><span class="preview-title" id="previewTitle">پیش‌نمایش</span><button class="action" id="downloadFile" type="button" hidden>دانلود</button></div><div class="preview-content" id="previewContent"><div class="preview-empty">برای دیدن محتوا، یک فایل را انتخاب کنید.</div></div></section>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="codePreviewDialog" class="code-preview-dialog">
+    <div class="code-preview-layout">
+      <div class="preview-head-bar">
+        <div class="preview-title-tag">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+          <span id="codePreviewTitle">پیش‌نمایش زنده خروجی کد</span>
+        </div>
+        <button class="close-btn" type="button" id="closeCodePreview">بستن</button>
+      </div>
+      <div class="preview-iframe-host" id="codePreviewHost"></div>
+    </div>
+  </dialog>
+
+  
+<script>
+/* syntax + rich rendering (sandbox palette) */
+const KW=new Set('import from def class return if elif else fi then for while do done in function const let var async await try except catch finally with as and or not True False None true false null pip pkg git python python3 node npm curl cd ls cat echo mkdir rm cp mv export sudo apt wrangler gh chmod source'.split(' '));
+const TOK=/(#[^\n]*|\/\/[^\n]*)|("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|(\$\{?[A-Za-z_]\w*\}?)|((?<=\s)--?[A-Za-z][\w-]*)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][\w.-]*)(?=\()|([A-Za-z_][\w-]*)/g;
+function hl(code){const f=document.createDocumentFragment();let last=0,m;TOK.lastIndex=0;
+  while((m=TOK.exec(code))){if(m.index>last)f.append(code.slice(last,m.index));const t=m[0];
+    const cls=m[1]?'c':m[2]?'s':m[3]?'v':m[4]?'o':m[5]?'n':m[6]?'f':(KW.has(m[7])?'k':null);
+    if(cls){const s=document.createElement('span');s.className=cls;s.textContent=t;f.append(s);}else f.append(t);last=m.index+t.length;}
+  if(last<code.length)f.append(code.slice(last));return f;}
+function hlLog(text){const f=document.createDocumentFragment(),lines=text.split('\n');
+  lines.forEach((ln,i)=>{const s=document.createElement('span'),l=ln.toLowerCase();
+    if(/(error|fatal|traceback|failed|denied|not found|no such)/.test(l))s.className='e';else if(/(warn|deprecated)/.test(l))s.className='w';else if(/^\s*[$>] /.test(ln))s.className='f';
+    s.textContent=ln+(i<lines.length-1?'\n':'');f.append(s);});return f;}
+function openLivePreview(code, lang){
+  const dlg = document.querySelector('#codePreviewDialog');
+  const host = document.querySelector('#codePreviewHost');
+  const title = document.querySelector('#codePreviewTitle');
+  title.textContent = `پیش‌نمایش زنده کد (${(lang||'HTML').toUpperCase()})`;
+  host.replaceChildren();
+  const iframe = document.createElement('iframe');
+  iframe.className = 'preview-iframe-host';
+  iframe.sandbox = 'allow-scripts allow-modals allow-same-origin';
+  host.append(iframe);
+  dlg.showModal();
+  let htmlDoc = code;
+  if(!/^\s*<(?:!DOCTYPE|html)/i.test(code)){
+    htmlDoc = `<!DOCTYPE html><html lang="fa"><head><meta charset="utf-8"><style>body{margin:16px;font-family:sans-serif;background:#111;color:#fff}</style></head><body>${code}</body></html>`;
+  }
+  iframe.srcdoc = htmlDoc;
+}
+
+function getExtForLang(lang){
+  const l = (lang||'').toLowerCase();
+  if(l==='html'||l==='htm') return '.html';
+  if(l==='python'||l==='py') return '.py';
+  if(l==='javascript'||l==='js') return '.js';
+  if(l==='typescript'||l==='ts') return '.ts';
+  if(l==='css') return '.css';
+  if(l==='json') return '.json';
+  if(l==='sh'||l==='bash'||l==='shell') return '.sh';
+  if(l==='sql') return '.sql';
+  if(l==='md'||l==='markdown') return '.md';
+  return '.txt';
+}
+
+function codeBlock(code, lang='code'){
+  const box = document.createElement('div');
+  box.className = 'cb';
+  const head = document.createElement('div');
+  head.className = 'cb-head';
+  const langTag = document.createElement('span');
+  langTag.className = 'cb-lang';
+  langTag.textContent = (lang || 'CODE').toUpperCase();
+  head.append(langTag);
+  const tools = document.createElement('div');
+  tools.className = 'cb-tools';
+
+  const isPreviewable = /^(html|htm|svg|xml)$/i.test(lang) || /^\s*<[!a-z]/i.test(code);
+  if(isPreviewable){
+    const pvBtn = document.createElement('button');
+    pvBtn.type = 'button';
+    pvBtn.className = 'cb-btn';
+    pvBtn.title = 'پیش‌نمایش زنده کد';
+    pvBtn.setAttribute('aria-label','پیش‌نمایش زنده کد');
+    pvBtn.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>';
+    pvBtn.onclick = () => openLivePreview(code, lang);
+    tools.append(pvBtn);
+  }
+
+  const dlBtn = document.createElement('button');
+  dlBtn.type = 'button';
+  dlBtn.className = 'cb-btn';
+  dlBtn.title = 'دانلود فایل کد';
+  dlBtn.setAttribute('aria-label','دانلود فایل کد');
+  dlBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+  dlBtn.onclick = () => saveText(`terminux-snippet${getExtForLang(lang)}`, code);
+  tools.append(dlBtn);
+
+  const cpBtn = document.createElement('button');
+  cpBtn.type = 'button';
+  cpBtn.className = 'cb-btn';
+  cpBtn.title = 'کپی کد';
+  cpBtn.setAttribute('aria-label','کپی کد');
+  cpBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  cpBtn.onclick = async () => {
+    try { await navigator.clipboard.writeText(code); cpBtn.classList.add('copied'); } catch (_) {}
+    setTimeout(() => { cpBtn.classList.remove('copied'); }, 1400);
+  };
+  tools.append(cpBtn);
+
+  head.append(tools);
+  box.append(head);
+  const pre = document.createElement('pre');
+  pre.dir = 'ltr';
+  pre.append(hl(code));
+  box.append(pre);
+  return box;
+}
+
+function richBlocks(text){
+  const out = [], re = /```([\w+-]*)[ \t]*\n?([\s\S]*?)```/g;
+  let last = 0, m;
+  const para = s => {
+    s = s.replace(/^\n+|\n+$/g, '');
+    if(!s) return;
+    const d = document.createElement('div');
+    d.className = 'message-body';
+    d.dir = 'auto';
+    s.split(/(`[^`\n]+`)/).forEach(p => {
+      if(/^`[^`\n]+`$/.test(p)){
+        const c = document.createElement('code');
+        c.className = 'ic';
+        c.textContent = p.slice(1, -1);
+        d.append(c);
+      } else d.append(p);
+    });
+    out.push(d);
+  };
+  while((m = re.exec(text))){
+    para(text.slice(last, m.index));
+    out.push(codeBlock(m[2].replace(/\n$/, ''), m[1]));
+    last = m.index + m[0].length;
+  }
+  para(text.slice(last));
+  return out;
+}
+</script>
+<script>
+    const feed=document.querySelector('#feed'),promptBox=document.querySelector('#prompt'),sendButton=document.querySelector('#sendButton'),dragHint=document.querySelector('#dragHint'),settingsDialog=document.querySelector('#settingsDialog'),filesDialog=document.querySelector('#filesDialog'),codePreviewDialog=document.querySelector('#codePreviewDialog');
+    const selectedFiles=document.querySelector('#selectedFiles');
+    let speakOn=localStorage.getItem('terminuxTts')==='1',lastEventId=0,isRunning=false,pending=null,settingsPrompted=false,uploads=[],uploading=0,fileDirectory='.',previewUrl='';
+    let liveTermCard=null,liveTermText=null,liveTermTimer=null,liveTermStart=0;
+
+    async function api(path,body){
+      const options=body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)};
+      let response;
+      try{response=await fetch(path,options);}catch(_){throw new Error('ارتباط با سرور محلی برقرار نشد؛ اتصال Termux را بررسی کن.');}
+      const raw=await response.text();let data={};
+      if(raw){try{data=JSON.parse(raw);}catch(_){throw new Error('سرور محلی پاسخ معتبر JSON نداد؛ احتمالاً سرویس اشتباه یا صفحهٔ خطا پاسخ داده است.');}}
+      if(!response.ok)throw new Error(data.error||`درخواست ناموفق بود (HTTP ${response.status}).`);
+      return data;
+    }
+    function stripForSpeech(text){return String(text).replace(/```[\s\S]*?```/g,' ').replace(/`([^`]*)`/g,'$1').replace(/!?\[([^\]]*)\]\([^)]*\)/g,'$1').replace(/^\s*[#>*\-]+\s?/gm,'').replace(/\s{2,}/g,' ').trim();}
+    const speakToggle=document.querySelector('#speakToggle');
+    function renderSpeakToggle(){speakToggle.textContent=speakOn?'TTS · ON':'TTS · OFF';speakToggle.classList.toggle('on',speakOn);}
+    speakToggle.addEventListener('click',async()=>{speakOn=!speakOn;localStorage.setItem('terminuxTts',speakOn?'1':'0');renderSpeakToggle();if(speakOn){try{await api('/api/speak',{text:'گفتار روشن است.'});}catch(error){speakOn=false;localStorage.setItem('terminuxTts','0');renderSpeakToggle();appendMessage('error','گفتار کار نکرد: '+error.message+' — بستهٔ Termux:API و اپ اندرویدش لازم است (pkg install termux-api).','خطا');}}else{try{await api('/api/speak',{stop:true});}catch(_){}}});
+    async function speak(text){if(!speakOn||!text)return;try{const clean=stripForSpeech(text);if(clean)await api('/api/speak',{text:clean});}catch(error){speakOn=false;localStorage.setItem('terminuxTts','0');renderSpeakToggle();appendMessage('error','گفتار کار نکرد: '+error.message+' — بستهٔ Termux:API و اپ اندرویدش لازم است (pkg install termux-api).','خطا');}}
+    function el(tag,className,text){const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node;}
+    function fileUrl(path,download=false){const query=new URLSearchParams({path});if(download)query.set('download','1');return `/api/file?${query}`;}
+    function addAttachmentLinks(parent,files){
+      if(!files?.length)return;
+      const group=el('div','message-files');
+      files.forEach(file=>{const link=el('a','file-link'),url=fileUrl(file.path||'');link.href=url;link.target='_blank';link.rel='noreferrer';
+        if(file.mimeType?.startsWith('image/')){const image=el('img');image.src=url;image.alt=file.name||'تصویر';link.append(image);}
+        const title=el('span','',file.name||'فایل');title.dir='auto';link.append(title);group.append(link);
+      });parent.append(group);
+    }
+    let autoScroll=true;
+    feed.addEventListener('scroll',()=>{
+      const nearBottom=feed.scrollHeight-feed.scrollTop-feed.clientHeight<100;
+      if(!nearBottom && autoScroll) autoScroll=false;
+      if(nearBottom && !autoScroll) autoScroll=true;
+    });
+    function feedIsNearBottom(){return autoScroll;}
+    function keepFeedAtBottom(force=false){
+      if(autoScroll||force){
+        requestAnimationFrame(()=>{
+          feed.scrollTo({top:feed.scrollHeight,behavior:'smooth'});
+        });
+      }
+    }
+    
+    function appendMessage(type,text,label,attachments=[]){
+      const follow=feedIsNearBottom();
+      document.querySelector('#welcome')?.remove();
+      const card=el('article',`message ${type}`);
+      card.append(el('div','message-label',label));
+      if(text){if(type==='assistant')card.append(...richBlocks(text));else{const body=el('div','message-body',text);body.dir='auto';card.append(body);}}
+      addAttachmentLinks(card,attachments);
+
+      if(type==='user'||type==='assistant'){
+        const actions=el('div','msg-actions');
+        if(type==='user'){
+          const retryBtn=el('button','msg-act-icon-btn');
+          retryBtn.title='ویرایش و ارسال مجدد';
+          retryBtn.setAttribute('aria-label','ویرایش و ارسال مجدد');
+          retryBtn.innerHTML='<svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+          retryBtn.onclick=()=>{promptBox.value=text;promptBox.dispatchEvent(new Event('input',{bubbles:true}));promptBox.focus();};
+          
+          const copyBtn=el('button','msg-act-icon-btn');
+          copyBtn.title='کپی متن';
+          copyBtn.setAttribute('aria-label','کپی متن');
+          copyBtn.innerHTML='<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+          copyBtn.onclick=async()=>{
+            try{await navigator.clipboard.writeText(text);copyBtn.classList.add('copied');}catch(_){}
+            setTimeout(()=>copyBtn.classList.remove('copied'),1400);
+          };
+          actions.append(retryBtn,copyBtn);
+        }else if(type==='assistant'){
+          const copyBtn=el('button','msg-act-icon-btn');
+          copyBtn.title='کپی پاسخ';
+          copyBtn.setAttribute('aria-label','کپی پاسخ');
+          copyBtn.innerHTML='<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+          copyBtn.onclick=async()=>{
+            try{await navigator.clipboard.writeText(text);copyBtn.classList.add('copied');}catch(_){}
+            setTimeout(()=>copyBtn.classList.remove('copied'),1400);
+          };
+          
+          const shareBtn=el('button','msg-act-icon-btn');
+          shareBtn.title='اشتراک‌گذاری';
+          shareBtn.setAttribute('aria-label','اشتراک‌گذاری');
+          shareBtn.innerHTML='<svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>';
+          shareBtn.onclick=async()=>{
+            if(navigator.share){try{await navigator.share({title:'پاسخ Terminux',text});}catch(_){}}
+            else{try{await navigator.clipboard.writeText(text);shareBtn.classList.add('copied');}catch(_){}setTimeout(()=>shareBtn.classList.remove('copied'),1400);}
+          };
+          
+          const replyBtn=el('button','msg-act-icon-btn');
+          replyBtn.title='ریپلای به این پاسخ';
+          replyBtn.setAttribute('aria-label','ریپلای به این پاسخ');
+          replyBtn.innerHTML='<svg viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>';
+          replyBtn.onclick=()=>{
+            const snippet=text.slice(0,75).replace(/\n/g,' ');
+            const quote=`> 💬 [در پاسخ به: "${snippet}..."]\n\n`;
+            promptBox.value=quote;
+            promptBox.dispatchEvent(new Event('input',{bubbles:true}));
+            promptBox.focus();
+            promptBox.setSelectionRange(quote.length,quote.length);
+          };
+          actions.append(copyBtn,shareBtn,replyBtn);
+        }
+        card.append(actions);
+      }
+      feed.append(card);keepFeedAtBottom(follow);
+    }
+    function updateApprovalUI(){
+      if(pending){
+        sendButton.classList.add('approval-mode');
+        sendButton.classList.remove('blinking');
+        sendButton.disabled=false;
+        dragHint.hidden=false;
+        dragHint.style.opacity='1';
+        sendButton.title='برای اجرای فرمان، به سمت داخل بکشید (Drag to Run)';
+      }else if(isRunning && sendButton.dataset.approvedCommand==='true'){
+        sendButton.classList.remove('approval-mode');
+        sendButton.classList.add('blinking');
+        sendButton.disabled=true;
+        dragHint.hidden=true;
+        sendButton.title='در حال اجرای فرمان در ترمینال…';
+      }else{
+        sendButton.classList.remove('approval-mode','blinking');
+        sendButton.dataset.approvedCommand='false';
+        dragHint.hidden=true;
+        sendButton.title='ارسال';
+        updateSend();
+      }
+    }
+    function appendCommand(command,id){
+      document.querySelector('#welcome')?.remove();const card=el('article','command-card');card.append(el('div','command-head','درخواست تأیید فرمان'));
+      const code=el('pre','command-code');code.dir='ltr';code.append(hl(command));card.append(code);const actions=el('div','command-actions');
+      const approve=el('button','action primary','اجرا'),reject=el('button','action reject','رد');
+      approve.onclick=()=>{sendButton.dataset.approvedCommand='true';decide(id,true,approve,reject);};
+      reject.onclick=()=>decide(id,false,approve,reject);
+      actions.append(approve,reject);card.append(actions);feed.append(card);keepFeedAtBottom(true);
+      updateApprovalUI();
+    }
+    async function decide(id,approved,...buttons){
+      buttons.forEach(button=>button.disabled=true);
+      try{
+        if(approved)sendButton.dataset.approvedCommand='true';
+        await api('/api/approval',{id,approved});
+      }catch(error){
+        appendMessage('error',error.message,'ERROR');
+        buttons.forEach(button=>button.disabled=false);
+      }finally{
+        updateApprovalUI();
+      }
+    }
+    function saveText(name,text,mime='text/plain'){
+      const link=document.createElement('a'),url=URL.createObjectURL(new Blob([text],{type:mime}));link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }
+    function appendOutput(event){
+      document.querySelector('#welcome')?.remove();const details=el('article','tool-output');
+      const head=el('div','tool-head'),state=el('span',`tool-state ${event.exit_code===0?'':'fail'}`,event.exit_code===0?'موفق':'ناموفق');
+      head.append(state,el('span','log-meta',event.tool||'Termux'),el('span','log-meta',event.command||''));details.append(head);
+      const output=event.output||'(بدون خروجی)';const pre=el('pre','log-text');pre.dir='ltr';pre.append(hlLog(output));details.append(pre);
+      const actions=el('div','log-actions'),copy=el('button','action','کپی لاگ'),download=el('button','action','دانلود لاگ');
+      copy.onclick=async()=>{try{await navigator.clipboard.writeText(output);copy.textContent='کپی شد';setTimeout(()=>copy.textContent='کپی لاگ',1400);}catch(_){copy.textContent='کپی نشد';}};
+      download.onclick=()=>saveText(`terminux-${event.tool||'log'}.txt`,output);actions.append(copy,download);details.append(actions);const follow=feedIsNearBottom();feed.append(details);keepFeedAtBottom(follow);
+    }
+    function ensureLiveTerminal(command){
+      if(!liveTermCard){
+        document.querySelector('#welcome')?.remove();
+        liveTermCard=el('article','live-terminal');
+        const head=el('div','live-term-head');
+        const title=el('div','live-term-title');
+        title.append(el('span','live-term-dot'),el('span','',`در حال اجرا: ${command||'Termux'}`));
+        const timerSpan=el('span','log-meta','00:00');
+        head.append(title,timerSpan);
+        liveTermCard.append(head);
+        liveTermText=el('pre','live-term-text');
+        liveTermText.dir='ltr';
+        liveTermCard.append(liveTermText);
+        const follow=feedIsNearBottom();
+        feed.append(liveTermCard);
+        keepFeedAtBottom(follow);
+        liveTermStart=Date.now();
+        if(liveTermTimer)clearInterval(liveTermTimer);
+        liveTermTimer=setInterval(()=>{
+          const sec=Math.floor((Date.now()-liveTermStart)/1000);
+          const m=String(Math.floor(sec/60)).padStart(2,'0');
+          const s=String(sec%60).padStart(2,'0');
+          timerSpan.textContent=`${m}:${s}`;
+        },1000);
+      }
+    }
+    function appendLiveChunk(chunk){
+      if(liveTermText){
+        liveTermText.append(hlLog(chunk));
+        liveTermText.scrollTop=liveTermText.scrollHeight;
+      }
+    }
+    function finishLiveTerminal(){
+      if(liveTermTimer){clearInterval(liveTermTimer);liveTermTimer=null;}
+      if(liveTermCard){liveTermCard.remove();liveTermCard=null;liveTermText=null;}
+    }
+
+    function renderEvent(event){
+      if(event.id)lastEventId=Math.max(lastEventId,event.id);
+      if(event.type==='user')appendMessage('user',event.text,'شما',event.attachments||[]);
+      if(event.type==='assistant'){appendMessage('assistant',event.text,'SHΞN™');speak(event.text);}
+      if(event.type==='error')appendMessage('error',event.text,'خطا');
+      if(event.type==='notice')feed.append(el('div','notice',event.text));
+      if(event.type==='command_pending'){pending={id:event.approval_id,command:event.command};appendCommand(event.command,event.approval_id);}
+      if(event.type==='command_running'){
+        document.querySelector('#activity').textContent=`در حال اجرا: ${event.command||event.tool||''}`;
+        ensureLiveTerminal(event.command||event.tool);
+      }
+      if(event.type==='command_chunk'){
+        ensureLiveTerminal(event.command);
+        appendLiveChunk(event.chunk);
+      }
+      if(event.type==='command_result'){
+        finishLiveTerminal();
+        appendOutput(event);
+        document.querySelector('#activity').textContent='';
+        sendButton.dataset.approvedCommand='false';
+      }
+      if(event.type==='status'){setRunning(event.running);if(!event.running){finishLiveTerminal();pending=null;sendButton.dataset.approvedCommand='false';}}
+      updateApprovalUI();
+    }
+    function setRunning(value){isRunning=value;sendButton.classList.toggle('busy',value);document.querySelector('#statusDot').classList.toggle('busy',value);document.querySelector('#statusText').textContent=value?'در حال پردازش':'آماده';document.querySelector('#newChat').disabled=value;updateSend();updateApprovalUI();}
+    function setIntegration(id,name,ready){const badge=document.querySelector(`#${id}`);badge.textContent=`${name} · ${ready?'متصل':'تنظیم نشده'}`;badge.classList.toggle('ready',ready);}
+    async function poll(){
+      try{const state=await api(`/api/state?after=${lastEventId}`);state.events.forEach(renderEvent);setRunning(state.running);document.querySelector('#autoApprove').checked=state.autoApprove;
+        setIntegration('githubStatus','GitHub',state.githubConfigured);setIntegration('cloudflareStatus','Cloudflare',state.cloudflareConfigured);document.querySelector('#workspaceStatus').textContent=`فضای کاری · ${state.workspace.split('/').pop()}`;
+        document.querySelector('#modelChipName').textContent=state.model||'…';
+        if(state.ttsAvailable){speakToggle.hidden=false;renderSpeakToggle();}
+        if(state.pending&&(!pending||pending.id!==state.pending.id)){pending={id:state.pending.id,command:state.pending.command};appendCommand(state.pending.command,state.pending.id);}
+        if(pending&&state.pending===null)pending=null;
+        document.querySelector('#statusText').textContent=state.running?'در حال پردازش':'آماده';
+        document.querySelector('#statusDot').classList.toggle('busy',!!state.running);
+        updateApprovalUI();
+        if(!state.providerConfigured&&!settingsDialog.open&&!settingsPrompted){settingsPrompted=true;showSettings();}
+      }catch(_){document.querySelector('#statusText').textContent='اتصال محلی قطع است';document.querySelector('#statusDot').classList.add('busy');}
+    }
+    async function showSettings(){
+      try{const config=await api('/api/config');document.querySelector('#model').value=config.model||'gemini-3.8-flash';
+        document.querySelector('#apiKey').placeholder=config.configured?'ذخیره شده · برای نگه‌داشتن خالی بگذار':'کلید Gemini، قالب AQ.… یا قالب‌های قدیمی';
+        document.querySelector('#mistralApiKey').placeholder=config.mistralConfigured?'ذخیره شده · برای نگه‌داشتن خالی بگذار':'کلید Mistral';
+        document.querySelector('#deepseekApiKey').placeholder=config.deepseekConfigured?'ذخیره شده · برای نگه‌داشتن خالی بگذار':'کلید DeepSeek';
+        document.querySelector('#openrouterApiKey').placeholder=config.openrouterConfigured?'ذخیره شده · برای نگه‌داشتن خالی بگذار':'کلید OpenRouter';
+        document.querySelector('#linearApiKey').placeholder=config.linearConfigured?'ذخیره شده · برای نگه‌داشتن خالی بگذار':'کلید Linear';
+        document.querySelector('#hfToken').placeholder=config.hfConfigured?'ذخیره شده · برای نگه‌داشتن خالی بگذار':'توکن Hugging Face (hf_…)';
+        document.querySelector('#gmailAddress').placeholder=config.gmailConfigured?'ذخیره شده · برای نگه‌داشتن خالی بگذار':'you@gmail.com';
+        document.querySelector('#gmailAppPassword').placeholder=config.gmailConfigured?'ذخیره شده · برای نگه‌داشتن خالی بگذار':'رمز اپ Gmail';
+        document.querySelector('#driveClientId').placeholder=config.driveConfigured?'ذخیره شده · برای نگه‌داشتن خالی بگذار':'client_id از Google Cloud';
+        document.querySelector('#driveClientSecret').placeholder=config.driveConfigured?'ذخیره شده · برای نگه‌داشتن خالی بگذار':'client_secret';
+        document.querySelector('#driveRefreshToken').placeholder=config.driveConfigured?'ذخیره شده · برای نگه‌داشتن خالی بگذار':'refresh_token از OAuth Playground';
+        document.querySelector('#mcpServers').value=JSON.stringify(config.mcpServers||{},null,2);
+        document.querySelector('#githubToken').placeholder=config.githubConfigured?'ذخیره شده · برای نگه‌داشتن خالی بگذار':'توکن GitHub';document.querySelector('#cloudflareToken').placeholder=config.cloudflareConfigured?'ذخیره شده · برای نگه‌داشتن خالی بگذار':'توکن Cloudflare';
+        ['clearApiKey','clearMistralApiKey','clearDeepseekApiKey','clearOpenrouterApiKey','clearLinearApiKey','clearHfToken','clearGmail','clearDrive','clearGithubToken','clearCloudflareToken'].forEach(id=>document.querySelector(`#${id}`).checked=false);document.querySelector('#passTokensToShell').checked=!!config.passTokensToShell;settingsDialog.showModal();
+      }catch(error){appendMessage('error',error.message,'ERROR');}
+    }
+    function fileToBase64(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',').pop());reader.onerror=()=>reject(new Error('خواندن فایل انجام نشد.'));reader.readAsDataURL(file);});}
+    function renderSelectedFiles(){
+      selectedFiles.replaceChildren();uploads.forEach((file,index)=>{const chip=el('div','attachment-chip');if(file.mimeType?.startsWith('image/')){const image=el('img');image.src=fileUrl(file.path);image.alt=file.name;chip.append(image);}
+        chip.append(el('span','',file.name));const remove=el('button','','×');remove.type='button';remove.setAttribute('aria-label',`حذف ${file.name}`);remove.onclick=()=>{uploads.splice(index,1);renderSelectedFiles();updateSend();};chip.append(remove);selectedFiles.append(chip);});
+    }
+    function updateSend(){
+      if(pending)return;
+      sendButton.disabled=isRunning||uploading>0||(!promptBox.value.trim()&&!uploads.length);
+    }
+    async function uploadSelection(files){
+      const remaining=Math.max(0,5-uploads.length-uploading),chosen=files.slice(0,remaining);if(files.length>remaining)appendMessage('error','حداکثر ۵ فایل برای هر پیام.','بارگذاری');
+      uploading+=chosen.length;document.querySelector('#uploadNote').textContent=uploading?`در حال بارگذاری ${uploading} فایل…`:'';updateSend();
+      for(const file of chosen){try{const data=await fileToBase64(file);const result=await api('/api/upload',{name:file.name,mimeType:file.type||'application/octet-stream',data});uploads.push(result.file);renderSelectedFiles();}
+        catch(error){appendMessage('error',`${file.name}: ${error.message}`,'بارگذاری');}finally{uploading--;document.querySelector('#uploadNote').textContent=uploading?`در حال بارگذاری ${uploading} فایل…`:'';updateSend();}}
+    }
+    async function sendPrompt(){
+      if(pending)return;
+      const message=promptBox.value.trim();if(isRunning||uploading||(!message&&!uploads.length))return;
+      try{await api('/api/chat',{message,attachments:uploads});promptBox.value='';promptBox.dispatchEvent(new Event('input'));uploads=[];renderSelectedFiles();updateSend();promptBox.focus();}
+      catch(error){appendMessage('error',error.message,'ERROR');}
+    }
+
+    /* Drag to Run Gesture Handler */
+    let dragStartX=0,isDraggingSend=false,currentMaxDrag=100;
+    sendButton.addEventListener('pointerdown',e=>{
+      if(!pending)return;
+      isDraggingSend=true;
+      dragStartX=e.clientX;
+      currentMaxDrag=Math.max(70,promptBox.clientWidth*0.25);
+      try{sendButton.setPointerCapture(e.pointerId);}catch(_){}
+      sendButton.style.transition='none';
+      e.preventDefault();
+    });
+    sendButton.addEventListener('pointermove',e=>{
+      if(!isDraggingSend||!pending)return;
+      const inwardDeltaX=Math.max(0,dragStartX-e.clientX);
+      const clampDist=Math.min(inwardDeltaX,currentMaxDrag);
+      sendButton.style.transform=`translateX(-${clampDist}px)`;
+      dragHint.style.opacity=String(1-(clampDist/currentMaxDrag));
+    });
+    async function handlePointerEnd(e){
+      if(!isDraggingSend)return;
+      isDraggingSend=false;
+      try{sendButton.releasePointerCapture(e.pointerId);}catch(_){}
+      const inwardDeltaX=Math.max(0,dragStartX-e.clientX);
+      const threshold=currentMaxDrag*0.55;
+      if(pending&&inwardDeltaX>=threshold){
+        const pendingId=pending.id;
+        sendButton.dataset.approvedCommand='true';
+        sendButton.style.transition='transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)';
+        sendButton.style.transform='';
+        sendButton.classList.remove('approval-mode');
+        sendButton.classList.add('blinking');
+        dragHint.hidden=true;
+        await decide(pendingId,true);
+      }else{
+        sendButton.style.transition='transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)';
+        sendButton.style.transform='';
+        if(pending)dragHint.style.opacity='1';
+      }
+    }
+    sendButton.addEventListener('pointerup',handlePointerEnd);
+    sendButton.addEventListener('pointercancel',handlePointerEnd);
+
+    function parentPath(path){const parts=path.split('/').filter(Boolean);parts.pop();return parts.join('/')||'.';}
+    async function loadFiles(path){
+      const list=document.querySelector('#fileList');list.replaceChildren();list.append(el('div','preview-empty','در حال بارگذاری…'));
+      try{const data=await api(`/api/files?${new URLSearchParams({path})}`);fileDirectory=data.path||path;document.querySelector('#filePath').textContent=fileDirectory;list.replaceChildren();
+        if(fileDirectory!=='.'){const up=el('button','file-entry','↰ پوشهٔ بالاتر');up.onclick=()=>loadFiles(parentPath(fileDirectory));list.append(up);}
+        if(!data.entries.length)list.append(el('div','preview-empty','این پوشه خالی است.'));
+        data.entries.forEach(entry=>{const button=el('button','file-entry',`${entry.type==='directory'?'▸':'▧'}  ${entry.name}`);button.dir='auto';button.onclick=()=>entry.type==='directory'?loadFiles([fileDirectory,entry.name].filter(part=>part&&part!=='.').join('/')):showFile(entry.path||[fileDirectory,entry.name].filter(part=>part&&part!=='.').join('/'),entry.name);list.append(button);});
+      }catch(error){list.replaceChildren(el('div','preview-empty',error.message));}
+    }
+    async function showFile(path,name){
+      document.querySelector('#previewTitle').textContent=name;const download=document.querySelector('#downloadFile');download.hidden=false;download.onclick=()=>{const link=document.createElement('a');link.href=fileUrl(path,true);link.download=name;link.click();};
+      const pane=document.querySelector('#previewContent');pane.replaceChildren(el('div','preview-empty','در حال بارگذاری پیش‌نمایش…'));if(previewUrl)URL.revokeObjectURL(previewUrl);
+      try{const response=await fetch(fileUrl(path));if(!response.ok)throw new Error((await response.text())||`HTTP ${response.status}`);const blob=await response.blob(),type=response.headers.get('content-type')||blob.type||'',ext=name.split('.').pop().toLowerCase();pane.replaceChildren();
+        if(type.startsWith('image/')){previewUrl=URL.createObjectURL(blob);const image=el('img');image.src=previewUrl;image.alt=name;pane.append(image);}
+        else if(type==='application/pdf'||ext==='pdf'){previewUrl=URL.createObjectURL(blob);const frame=el('iframe');frame.src=previewUrl;frame.title=name;pane.append(frame);}
+        else if(type.startsWith('text/')||/^(json|xml|javascript)$/.test(type.split('/').pop())||/\.(txt|md|py|js|css|html|json|xml|log|sh|csv|ya?ml)$/i.test(name)){const text=await blob.text(),pre=el('pre','',text);pre.dir='ltr';pane.append(pre);}
+        else pane.append(el('div','preview-empty','پیش‌نمایش این نوع فایل در دسترس نیست. از دانلود استفاده کنید.'));
+      }catch(error){pane.replaceChildren(el('div','preview-empty',error.message));}
+    }
+    document.querySelector('#sendButton').addEventListener('click',sendPrompt);
+    promptBox.addEventListener('input',updateSend);
+    document.querySelector('#fileInput').addEventListener('change',event=>{uploadSelection(Array.from(event.target.files));event.target.value='';});
+    document.querySelector('#openSettings').onclick=showSettings;
+    document.querySelector('#cancelSettings').onclick=()=>settingsDialog.close();
+    document.querySelector('#settingsForm').addEventListener('submit',async event=>{
+      event.preventDefault();const submit=event.submitter;submit.disabled=true;
+      try{const mcpValue=document.querySelector('#mcpServers').value.trim();let mcpServers={};if(mcpValue){try{mcpServers=JSON.parse(mcpValue)}catch(_){throw new Error('JSON سرورهای MCP معتبر نیست')}}
+        await api('/api/config',{apiKey:document.querySelector('#apiKey').value,model:document.querySelector('#model').value,mistralApiKey:document.querySelector('#mistralApiKey').value,deepseekApiKey:document.querySelector('#deepseekApiKey').value,openrouterApiKey:document.querySelector('#openrouterApiKey').value,githubToken:document.querySelector('#githubToken').value,cloudflareToken:document.querySelector('#cloudflareToken').value,linearApiKey:document.querySelector('#linearApiKey').value,hfToken:document.querySelector('#hfToken').value,gmailAddress:document.querySelector('#gmailAddress').value,gmailAppPassword:document.querySelector('#gmailAppPassword').value,driveClientId:document.querySelector('#driveClientId').value,driveClientSecret:document.querySelector('#driveClientSecret').value,driveRefreshToken:document.querySelector('#driveRefreshToken').value,mcpServers,clearApiKey:document.querySelector('#clearApiKey').checked,clearMistralApiKey:document.querySelector('#clearMistralApiKey').checked,clearDeepseekApiKey:document.querySelector('#clearDeepseekApiKey').checked,clearOpenrouterApiKey:document.querySelector('#clearOpenrouterApiKey').checked,clearLinearApiKey:document.querySelector('#clearLinearApiKey').checked,clearHfToken:document.querySelector('#clearHfToken').checked,clearGmail:document.querySelector('#clearGmail').checked,clearDrive:document.querySelector('#clearDrive').checked,clearGithubToken:document.querySelector('#clearGithubToken').checked,clearCloudflareToken:document.querySelector('#clearCloudflareToken').checked,passTokensToShell:document.querySelector('#passTokensToShell').checked});
+        ['apiKey','mistralApiKey','deepseekApiKey','openrouterApiKey','linearApiKey','hfToken','gmailAddress','gmailAppPassword','driveClientId','driveClientSecret','driveRefreshToken','githubToken','cloudflareToken'].forEach(id=>document.querySelector(`#${id}`).value='');settingsDialog.close();appendMessage('assistant','تنظیمات ذخیره شد.','محلی');
+      }catch(error){alert(error.message);}finally{submit.disabled=false;}
+    });
+    document.querySelector('#autoApprove').addEventListener('change',async event=>{try{await api('/api/auto-approve',{enabled:event.target.checked});}catch(error){event.target.checked=false;alert(error.message);}});
+    document.querySelector('#newChat').onclick=async()=>{if(isRunning)return;try{await api('/api/clear',{});feed.replaceChildren(el('div','welcome','چه کاری انجام دهم؟'));lastEventId=0;window.location.reload();}catch(error){appendMessage('error',error.message,'ERROR');}};
+    document.querySelector('#openFiles').onclick=()=>{filesDialog.showModal();loadFiles('.');};
+    document.querySelector('#closeFiles').onclick=()=>filesDialog.close();
+    document.querySelector('#closeCodePreview').onclick=()=>codePreviewDialog.close();
+    filesDialog.addEventListener('close',()=>{if(previewUrl)URL.revokeObjectURL(previewUrl);previewUrl='';});
+    setInterval(poll,700);poll();updateSend();
+  </script>
+<script>
+(function(){
+const $=s=>document.querySelector(s),box=$('#prompt'),menu=$('#menu'),ml=$('#menuList'),mt=$('#menuTitle'),rail=$('#rail');
+let cur=null;
+const P={
+  tl:['اسکیل و تولز',[
+    ['پایتون · آماده‌سازی محیط','پایتون رو روی ترموکس نصب و آماده کن و بگو چه نسخه‌ای نصب شد.'],
+    ['پایتون · ساخت محیط مجازی','برای پروژه‌ی من یه محیط مجازی پایتون بساز و فعالش کن. اسم پروژه: '],
+    ['لینوکس · به‌روزرسانی بسته‌ها','بسته‌های ترموکس رو به‌روزرسانی کن.'],
+    ['لینوکس · فضای خالی و حجم پوشه‌ها','فضای خالی حافظه و حجم پوشه‌های اصلی رو نشون بده.'],
+    ['خطایاب · بررسی و رفع خطا','این خطا رو بررسی کن، دلیلش رو ساده بگو و درستش کن: ']
+  ]],
+  gh:['GitHub',[
+    ['ساخت مخزن جدید','یه مخزن خصوصی جدید روی GitHub بساز. اسم مخزن: '],
+    ['انتشار پروژه‌ی من','پروژه‌ی داخل فضای کاری رو روی GitHub منتشر کن.'],
+    ['مخزن‌های من','فهرست مخزن‌های GitHub من رو نشون بده.'],
+    ['نوشتن README','برای پروژه‌ی من یه README فارسی و خوانا بنویس.']
+  ]]
+};
+const ICONS={
+  ss:'<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><path d="M12 6v6l4 2"/></svg>',
+  st:'<svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>',
+  fl:'<svg viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 8.07 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/></svg>',
+  gh:'<svg viewBox="0 0 24 24"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>',
+  tl:'<svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
+  cn:'<svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+  nw:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>'
+};
+const R=[['ss','نشست'],['gh','GitHub'],['fl','فایل‌ها'],['tl','اسکیل'],['cn','کانکشن'],['st','تنظیمات'],['nw','تازه']];
+function fit(){box.style.height='auto';box.style.height=Math.min(box.scrollHeight,innerHeight*.38)+'px';}
+box.addEventListener('input',fit);
+function row(t,sub,run,dead){const b=document.createElement('button');b.type='button';b.className='mi'+(dead?' dead':'');const s=document.createElement('span');s.textContent=t;b.append(s);
+  if(sub){const u=document.createElement('small');u.textContent=sub;b.append(u);}if(!dead)b.onclick=run;ml.append(b);}
+function fill(text){closeMenu();box.value=text;box.dispatchEvent(new Event('input',{bubbles:true}));box.focus();box.setSelectionRange(text.length,text.length);}
+async function renderSession(){
+  mt.textContent='نشست و زیرساخت ترموکس';ml.replaceChildren();row('در حال دریافت اطلاعات نشست…','',null,true);
+  try{
+    const s=await api('/api/system/session');ml.replaceChildren();
+    row('سیستم‌عامل و پلتفرم',s.platform+' ('+s.arch+')',null,true);
+    row('PID فرایند',String(s.pid),null,true);
+    row('مدت زمان فعالیت (Uptime)',Math.floor(s.uptime)+' ثانیه',null,true);
+    row('مصرف حافظه RAM',s.memory.rss+' / RAM کل: '+s.memory.systemTotal,null,true);
+    row('فضای کاری Termux',s.workspacePath,()=>renderFiles(s.workspacePath));
+    row('مدل فعال AI',s.activeModel,()=>openModels());
+  }catch(err){ml.replaceChildren();row(err.message,'',null,true);}
+}
+async function renderGithubRepos(filter='all'){
+  mt.textContent='مخازن GitHub';ml.replaceChildren();row('در حال دریافت مخازن…','',null,true);
+  try{
+    const data=await api('/api/github/repos?filter='+filter);ml.replaceChildren();
+    if(data.user){
+      row('کاربر متصل: '+data.user.login,(data.user.name||'')+' ('+(data.repos?.length||0)+' مخزن)',()=>window.open(data.user.html_url,'_blank'));
+    }
+    row('فیلتر: '+filter.toUpperCase(),'برای تغییر فیلتر کلیک کنید',()=>{
+      const next=filter==='all'?'public':(filter==='public'?'private':'all');
+      renderGithubRepos(next);
+    });
+    if(!data.repos||!data.repos.length){row('هیچ مخزنی یافت نشد','',null,true);return;}
+    data.repos.forEach(repo=>{
+      const sub=(repo.private?'🔒 خصوصی':'🌐 عمومی')+' · '+repo.stargazers_count+'★ · '+repo.default_branch;
+      row(repo.name,sub,()=>renderGithubRepoTree(repo.full_name,repo.default_branch));
+    });
+  }catch(err){
+    ml.replaceChildren();
+    row(err.message,'با تنظیم توکن GitHub در تنظیمات وصل شوید',()=>{closeMenu();$('#openSettings').click();});
+  }
+}
+async function renderGithubRepoTree(repo,branch,path=''){
+  mt.textContent='مخزن: '+repo+(path?' / '+path:'');ml.replaceChildren();row('در حال بارگذاری درخت فایل…','',null,true);
+  try{
+    const data=await api('/api/github/repo-tree?'+new URLSearchParams({repo,branch,path}));
+    ml.replaceChildren();
+    row('↰ بازگشت به مخازن','',()=>renderGithubRepos());
+    if(path){
+      const parts=path.split('/').slice(0,-1).join('/');
+      row('↰ پوشه بالاتر','',()=>renderGithubRepoTree(repo,branch,parts));
+    }
+    data.entries.forEach(item=>{
+      const icon=item.type==='dir'?'📁 ':'📄 ';
+      row(icon+item.name,item.type==='dir'?'پوشه':(item.size?item.size+' بایت':'فایل'),()=>{
+        if(item.type==='dir')renderGithubRepoTree(repo,branch,item.path);
+        else fill(`فایل ${item.path} از مخزن ${repo} رو بررسی کن.`);
+      });
+    });
+  }catch(err){ml.replaceChildren();row(err.message,'',null,true);}
+}
+async function renderConnections(){mt.textContent='کانکشن‌ها';ml.replaceChildren();row('در حال دریافت وضعیت…','',null,true);
+  try{const c=await api('/api/config');ml.replaceChildren();
+    [['Gemini',c.configured],['Mistral',c.mistralConfigured],['DeepSeek',c.deepseekConfigured],['OpenRouter',c.openrouterConfigured],['GitHub',c.githubConfigured],['Cloudflare',c.cloudflareConfigured],['Linear',c.linearConfigured],['Hugging Face',c.hfConfigured],['Gmail',c.gmailConfigured],['Google Drive',c.driveConfigured]].forEach(([name,ready])=>row(name,ready?'● متصل':'○ تنظیم نشده',()=>{closeMenu();$('#openSettings').click();}));
+    const mcp=Object.keys(c.mcpServers||{});
+    row('سرورهای MCP',mcp.length?mcp.length+' سرور فعال':'تنظیم نشده',()=>{closeMenu();$('#openSettings').click();});
+    row('مدل فعال',c.model||'—',null,true);
+  }catch(err){ml.replaceChildren();row(err.message,'',null,true);}}
+function openMenu(k){if(cur===k)return closeMenu();cur=k;ml.replaceChildren();
+  document.body.classList.add('menu-open');menu.classList.add('open');rail.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===k));
+  if(P[k]){mt.textContent=P[k][0];
+    P[k][1].forEach(([t,p])=>row(t,'',()=>fill(p)));}
+  else if(k==='ss')renderSession();
+  else if(k==='gh')renderGithubRepos();
+  else if(k==='fl')renderFiles('/app/applet/Terminux-workspace');
+  else if(k==='st'){mt.textContent='تنظیمات';const a=$('#autoApprove');
+    row('کلیدها، مدل و توکن‌ها','',()=>{closeMenu();$('#openSettings').click();});
+    row('تأیید خودکار فرمان‌ها',a.checked?'روشن':'خاموش · هر فرمان تأیید می‌خواهد',()=>{a.click();closeMenu();});}
+  else if(k==='nw'){mt.textContent='گفتگوی تازه';row('پاک‌کردن این گفتگو و شروع از نو','',()=>{closeMenu();$('#newChat').click();});}
+  else if(k==='cn')renderConnections();}
+function closeMenu(){cur=null;document.body.classList.remove('menu-open');menu.classList.remove('open');rail.querySelectorAll('button').forEach(b=>b.classList.remove('on'));}
+async function renderFiles(path){ml.replaceChildren();mt.textContent='فایل‌ها · '+path;
+  try{const d=await api('/api/files?'+new URLSearchParams({path})),dir=d.path||path;mt.textContent='فایل‌ها · '+dir;ml.replaceChildren();
+    if(dir!=='.')row('↰ پوشهٔ بالاتر','',()=>renderFiles(parentPath(dir)));
+    if(!d.entries.length)row('این پوشه خالی است','',null,true);
+    d.entries.forEach(e=>{const full=[dir,e.name].filter(x=>x&&x!=='.').join('/');
+      row((e.type==='directory'?'▸ ':'')+e.name,'',()=>e.type==='directory'?renderFiles(full):(closeMenu(),filesDialog.showModal(),loadFiles(parentPath(e.path||full)).then(()=>showFile(e.path||full,e.name))));});
+  }catch(err){row(err.message,'',null,true);}}
+/* مدل: انتخابگر شاخه‌ای سرویس‌دهنده ← مدل */
+async function openModels(providerId){
+  cur='model';document.body.classList.add('menu-open');menu.classList.add('open');
+  rail.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
+  try{const cat=await api('/api/models');ml.replaceChildren();
+    if(!providerId){mt.textContent='MODEL';
+      cat.providers.forEach(p=>{const active=p.id===cat.provider;
+        row(p.label,(p.free?'آزاد · بدون توکن':(p.configured?'کلید ذخیره شده':'توکن لازم دارد'))+(active?' · فعال':''),()=>openModels(p.id));});
+    }else{const p=cat.providers.find(x=>x.id===providerId);mt.textContent=p.label.toUpperCase();
+      row('‹ سرویس‌دهنده‌ها','',()=>openModels());
+      p.models.forEach(m=>{const active=p.id===cat.provider&&m.id===cat.model;
+        row(m.id,(m.note||'')+(active?' · فعال':''),()=>pickModel(p.id,m.id,p.label));});}
+  }catch(err){ml.replaceChildren();mt.textContent='MODEL';row(err.message,'',null,true);}
+}
+async function pickModel(providerId,modelId,label){
+  try{await api('/api/config',{provider:providerId,model:modelId});
+    $('#modelChipName').textContent=modelId;closeMenu();
+    document.querySelector('#feed').append(el('div','notice',`مدل فعال: ${label} · ${modelId}`));
+  }catch(err){alert(err.message);}
+}
+$('#modelChip').addEventListener('click',()=>openModels());
+R.forEach(([k,title])=>{const b=document.createElement('button');b.type='button';b.className='rail-btn';b.dataset.k=k;b.title=title;b.setAttribute('aria-label',title);b.innerHTML=ICONS[k]||'';b.onclick=()=>openMenu(k);rail.append(b);});
+menu.addEventListener('click',e=>{if(!e.target.closest('.mp'))closeMenu();});
+addEventListener('keydown',e=>{if(e.key==='Escape'&&cur)closeMenu();});
+const feedEl=document.getElementById('feed'),sync=()=>document.body.classList.toggle('chatting',!document.getElementById('welcome'));
+new MutationObserver(sync).observe(feedEl,{childList:true});sync();
+})();
+</script>
+</body>
+</html>

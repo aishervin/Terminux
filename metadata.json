@@ -1,0 +1,8 @@
+{
+  "name": "Terminux",
+  "description": "A local AI coding and terminal agent with a Persian web interface",
+  "prompt": "",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
