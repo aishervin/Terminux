@@ -919,6 +919,7 @@ async function runAgent(userMsg: string, attachments: any[]) {
       }
 
       const modelParts: any[] = [];
+      const responseParts: any[] = [];
       if (text) modelParts.push({ text });
 
       for (const call of functionCalls) {
@@ -948,16 +949,11 @@ async function runAgent(userMsg: string, attachments: any[]) {
         const displayOutput = typeof output === 'string' ? output : JSON.stringify(output, null, 2);
         addEvent('command_result', { command: label, output: displayOutput, exit_code: exitCode, tool: name });
 
-        history.push({
-          role: 'model',
-          parts: modelParts
-        });
-
-        history.push({
-          role: 'user',
-          parts: [{ functionResponse: { name, response: output } }]
-        });
+        responseParts.push({ functionResponse: { name, response: output } });
       }
+
+      history.push({ role: 'model', parts: modelParts });
+      history.push({ role: 'user', parts: responseParts });
     }
   } catch (err: any) {
     addEvent('error', { text: err.message || 'خطا در اجرای ایجنت.' });
