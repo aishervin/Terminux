@@ -829,7 +829,7 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
       for (const [key, value] of Object.entries(schema)) out[key] = key === 'type' && typeof value === 'string' ? value.toLowerCase() : normalizeSchema(value);
       return out;
     };
-    const openAiTools = TOOL_DECLARATIONS.filter((tool: any) => tool.parameters).map((tool: any) => ({
+    const openAiTools = prov === 'pollinations' ? [] : TOOL_DECLARATIONS.filter((tool: any) => tool.parameters).map((tool: any) => ({
       type: 'function',
       function: { name: tool.name, description: tool.description, parameters: normalizeSchema(tool.parameters) }
     }));
