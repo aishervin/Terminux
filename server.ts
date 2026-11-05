@@ -40,6 +40,16 @@ const PROVIDERS: Record<string, any> = {
       { id: 'gemini-3.1-pro-preview', note: 'پرچمدار استدلال · فقط پولی (بدون tier رایگان)' }
     ]
   },
+  gemini_oauth: {
+    label: 'Gemini OAuth',
+    kind: 'gemini_oauth',
+    key_field: 'gemini_oauth_tokens',
+    models: [
+      { id: 'gemini-3.8-flash', note: 'توکن Gemini CLI · پیش‌فرض' },
+      { id: 'gemini-3.7-flash', note: 'توکن Gemini CLI · سریع' },
+      { id: 'gemini-3.1-pro-preview', note: 'توکن Gemini CLI · استدلال' }
+    ]
+  },
   mistral: {
     label: 'Mistral',
     kind: 'openai',
@@ -88,6 +98,7 @@ const PROVIDERS: Record<string, any> = {
 
 const DEFAULT_MODELS: Record<string, string> = {
   gemini: 'gemini-3.8-flash',
+  gemini_oauth: 'gemini-3.8-flash',
   mistral: 'mistral-small-2603',
   deepseek: 'deepseek-v4-flash',
   openrouter: 'nvidia/nemotron-3.5-lightning:free',
@@ -164,6 +175,14 @@ function ttsBinaryAvailable(): boolean {
   } catch (_) {
     return false;
   }
+}
+
+// توکن‌های OAuth خط فرمان Gemini (سرویس Code Assist) با چرخش خودکار
+let geminiOauthTokenIndex = 0;
+function geminiOauthTokens(): string[] {
+  const raw = config.gemini_oauth_tokens;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((t) => typeof t === 'string' && t.trim());
 }
 
 const TOOL_DECLARATIONS = [
@@ -338,6 +357,7 @@ const TOOL_DECLARATIONS = [
 interface Config {
   provider: string;
   api_key: string;
+  gemini_oauth_tokens: string[];
   model: string;
   mistral_api_key: string;
   deepseek_api_key: string;
@@ -358,6 +378,7 @@ interface Config {
 let config: Config = {
   provider: process.env.TERMINUX_PROVIDER || 'gemini',
   api_key: process.env.GEMINI_API_KEY || '',
+  gemini_oauth_tokens: (process.env.GEMINI_OAUTH_TOKENS || '').split(/[\s,]+/).filter(Boolean),
   model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
   mistral_api_key: process.env.MISTRAL_API_KEY || '',
   deepseek_api_key: process.env.DEEPSEEK_API_KEY || '',
@@ -448,6 +469,7 @@ function addEvent(kind: string, fields: Record<string, any> = {}) {
 function isProviderConfigured(prov: string): boolean {
   if (prov === 'pollinations') return true;
   if (prov === 'gemini') return Boolean(config.api_key || process.env.GEMINI_API_KEY);
+  if (prov === 'gemini_oauth') return geminiOauthTokens().length > 0;
   if (prov === 'mistral') return Boolean(config.mistral_api_key);
   if (prov === 'deepseek') return Boolean(config.deepseek_api_key);
   if (prov === 'openrouter') return Boolean(config.openrouter_api_key);
@@ -652,6 +674,65 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
   const prov = config.provider || 'gemini';
   // Standalone first: use saved key. Fallback to env only if no saved key exists.
   const apiKey = config.api_key || process.env.GEMINI_API_KEY || '';
+
+  if (prov === 'gemini_oauth') {
+    const toks = geminiOauthTokens();
+    if (!toks.length) {
+      throw new Error('توکن Gemini OAuth تنظیم نشده است. در تنظیمات، توکن‌های AQ.… را وارد کنید (هر خط یک توکن).');
+    }
+    const oauthContents: any[] = historyList.map((h) => ({
+      role: h.role === 'assistant' || h.role === 'model' ? 'model' : 'user',
+      parts: Array.isArray(h.parts)
+        ? h.parts
+        : typeof h.content === 'string'
+        ? [{ text: h.content }]
+        : [{ text: JSON.stringify(h) }]
+    }));
+    let lastErr: any = null;
+    for (let i = 0; i < toks.length; i++) {
+      const token = toks[(geminiOauthTokenIndex + i) % toks.length].trim();
+      try {
+        const res = await fetch('https://cloudcode-pa.googleapis.com/v1internal:generateContent', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token,
+            'User-Agent': 'Terminux-Agent'
+          },
+          body: JSON.stringify({
+            model: currentModel(),
+            project: '',
+            request: {
+              contents: oauthContents,
+              systemInstruction: SYSTEM_PROMPT,
+              temperature: 0.2,
+              tools: [{ functionDeclarations: TOOL_DECLARATIONS as any }]
+            }
+          })
+        });
+        if (!res.ok) {
+          const errText = (await res.text()).slice(0, 300);
+          lastErr = new Error('خطای ' + res.status + ' از Code Assist: ' + errText);
+          if (res.status === 401 || res.status === 403 || res.status === 429) continue;
+          throw lastErr;
+        }
+        const data: any = await res.json();
+        const parts = data?.candidates?.[0]?.content?.parts || [];
+        geminiOauthTokenIndex = geminiOauthTokenIndex + i + 1;
+        return {
+          text: parts.map((p: any) => p?.text || '').join(''),
+          functionCalls: parts.map((p: any) => p?.functionCall).filter(Boolean)
+        };
+      } catch (err: any) {
+        lastErr = err;
+      }
+    }
+    const lastMsg: string = lastErr?.message || '';
+    if (lastMsg.includes('401')) {
+      throw new Error('همهٔ توکن‌های Gemini OAuth رد شدند (401) — احتمالاً منقضی شده‌اند. با ورود دوباره به Gemini CLI توکن تازه بگیرید و در تنظیمات جایگزین کنید. ' + lastMsg.slice(0, 200));
+    }
+    throw lastErr || new Error('هیچ توکن Gemini OAuth پاسخ نداد.');
+  }
 
   if (prov === 'gemini') {
     if (!apiKey) {
@@ -886,6 +967,8 @@ app.get('/api/state', (req: Request, res: Response) => {
     mistralConfigured: isProviderConfigured('mistral'),
     deepseekConfigured: isProviderConfigured('deepseek'),
     openrouterConfigured: isProviderConfigured('openrouter'),
+    geminiOauthConfigured: geminiOauthTokens().length > 0,
+    geminiOauthTokenCount: geminiOauthTokens().length,
     passTokensToShell: config.pass_tokens_to_shell,
     provider: config.provider || 'gemini',
     model: config.model,
@@ -1020,6 +1103,8 @@ app.post('/api/config', (req: Request, res: Response) => {
     mistralApiKey,
     deepseekApiKey,
     openrouterApiKey,
+    geminiOauthTokens,
+    clearGeminiOauthTokens,
     githubToken,
     cloudflareToken,
     linearApiKey,
@@ -1038,6 +1123,13 @@ app.post('/api/config', (req: Request, res: Response) => {
   if (mistralApiKey !== undefined) config.mistral_api_key = mistralApiKey;
   if (deepseekApiKey !== undefined) config.deepseek_api_key = deepseekApiKey;
   if (openrouterApiKey !== undefined) config.openrouter_api_key = openrouterApiKey;
+  if (clearGeminiOauthTokens) {
+    config.gemini_oauth_tokens = [];
+  } else if (typeof geminiOauthTokens === 'string' && geminiOauthTokens.trim()) {
+    config.gemini_oauth_tokens = geminiOauthTokens.split(/[\s,]+/).map((t: string) => t.trim()).filter(Boolean);
+  } else if (Array.isArray(geminiOauthTokens) && geminiOauthTokens.length) {
+    config.gemini_oauth_tokens = geminiOauthTokens.map((t: any) => String(t).trim()).filter(Boolean);
+  }
   if (githubToken !== undefined) config.github_token = githubToken;
   if (cloudflareToken !== undefined) config.cloudflare_token = cloudflareToken;
   if (linearApiKey !== undefined) config.linear_api_key = linearApiKey;
