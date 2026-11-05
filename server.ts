@@ -7,7 +7,7 @@ import { exec, execSync, spawn } from 'child_process';
 import { GoogleGenAI } from '@google/genai';
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: ['http://localhost:3000', 'http://127.0.0.1:3000'] }));
 app.use(express.json({ limit: '10mb' }));
 
 const APP_DIR = process.cwd();
