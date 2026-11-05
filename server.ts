@@ -327,13 +327,11 @@ const TOOL_DECLARATIONS = [
   },
   {
     name: 'self_update',
-    description: 'Pull latest source via git.',
-    parameters: { type: 'OBJECT', properties: {} }
+    description: 'Pull latest source via git.'
   },
   {
     name: 'restart_server',
-    description: 'Restart server process.',
-    parameters: { type: 'OBJECT', properties: {} }
+    description: 'Restart server process.'
   }
 ];
 
@@ -360,7 +358,7 @@ interface Config {
 let config: Config = {
   provider: process.env.TERMINUX_PROVIDER || 'gemini',
   api_key: process.env.GEMINI_API_KEY || '',
-  model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+  model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
   mistral_api_key: process.env.MISTRAL_API_KEY || '',
   deepseek_api_key: process.env.DEEPSEEK_API_KEY || '',
   openrouter_api_key: process.env.OPENROUTER_API_KEY || '',
@@ -696,8 +694,18 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
         functionCalls: response.functionCalls
       };
     } catch (err: any) {
-      if (err.message?.includes('401') || err.message?.includes('API key not valid')) {
+      const msg = err?.message || String(err);
+      if (msg.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED')) {
+        throw new Error('توکن ya29 در Gemini API پذیرفته نمی‌شود. لطفاً کلید API از Google AI Studio (که با AIza شروع می‌شود) را در تنظیمات وارد کنید.');
+      }
+      if (msg.includes('401') || msg.includes('API key not valid')) {
         throw new Error('خطای احراز هویت: کلید Gemini نامعتبر است. لطفاً تنظیمات را چک کنید.');
+      }
+      if (msg.includes('503') || msg.includes('high demand') || msg.includes('UNAVAILABLE')) {
+        throw new Error('مدل فعلاً تحت تقاضای سنگین است (503). معمولاً موقتی است؛ چند دقیقه بعد دوباره امتحان کنید یا موقتاً مدل دیگری (مثلاً gemini-3.7-flash) انتخاب کنید.');
+      }
+      if (msg.includes('403') && msg.includes('generateContent')) {
+        throw new Error('مدل انتخابی در دسترس کلید شما نیست (403). یک مدل دیگر از فهرست انتخاب کنید.');
       }
       throw err;
     }
@@ -714,6 +722,10 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
         content: typeof h.content === 'string' ? h.content : JSON.stringify(h.parts || h)
       }))
     ];
+
+    if (prov === 'openrouter' && !key) {
+      throw new Error('کلید OpenRouter تنظیم نشده است. مدل‌های :free هم برای احراز هویت به کلید نیاز دارند؛ از openrouter.ai کلید رایگان بگیرید و در تنظیمات وارد کنید.');
+    }
 
     const headers: Record<string, string> = { 
       'Content-Type': 'application/json',
@@ -747,6 +759,15 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
 
     if (prov === 'pollinations' && res.status === 429) {
       throw new Error('پولینیشنز بدون توکن فقط هر ۴۵ ثانیه یک پاسخ می‌دهد؛ کمی صبر کنید و دوباره بفرستید.');
+    }
+
+    if (!res.ok) {
+      let errText = '';
+      try {
+        const errData = await res.json();
+        errText = errData?.error?.message || '';
+      } catch (_) {}
+      throw new Error('خطای ' + res.status + ' از سرویس‌دهنده' + (errText ? ': ' + errText : '.'));
     }
 
     const data = await res.json();
