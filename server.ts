@@ -479,7 +479,8 @@ function isProviderConfigured(prov: string): boolean {
 function getWorkspacePath(relPath: string): string {
   const safePath = path.normalize(relPath).replace(/^(\.\.[\/\\])+/, '');
   const target = path.resolve(WORKSPACE_DIR, safePath);
-  if (!target.startsWith(WORKSPACE_DIR)) {
+  const relative = path.relative(WORKSPACE_DIR, target);
+  if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
     throw new Error('Access outside workspace is forbidden.');
   }
   return target;
@@ -667,7 +668,7 @@ async function executeTool(name: string, args: Record<string, any>): Promise<any
     return { ok: true, note: 'سرور تا چند ثانیه دیگر دوباره بالا می‌آید.' };
   }
 
-  return { ok: true, note: `Tool ${name} executed.` };
+  return { error: `ابزار «${name}» هنوز پیاده‌سازی نشده است؛ هیچ عملیاتی انجام نشد.` };
 }
 
 async function callModelWithTools(historyList: any[]): Promise<{ text?: string; functionCalls?: any[] }> {
@@ -796,13 +797,38 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
     const keyField = providerObj.key_field;
     const key = keyField ? (config[keyField as keyof Config] || '') : '';
 
-    const messages = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...historyList.map((h) => ({
-        role: h.role === 'model' || h.role === 'assistant' ? 'assistant' : 'user',
-        content: typeof h.content === 'string' ? h.content : JSON.stringify(h.parts || h)
-      }))
-    ];
+    const messages: any[] = [{ role: 'system', content: SYSTEM_PROMPT }];
+    let toolSequence = 0;
+    for (const item of historyList) {
+      const role = item.role === 'model' || item.role === 'assistant' ? 'assistant' : 'user';
+      const parts = Array.isArray(item.parts) ? item.parts : [];
+      const calls = parts.filter((p: any) => p?.functionCall).map((p: any) => ({
+        id: 'call_' + (++toolSequence), type: 'function',
+        function: { name: p.functionCall.name, arguments: JSON.stringify(p.functionCall.args || {}) }
+      }));
+      const responses = parts.filter((p: any) => p?.functionResponse);
+      const content = parts.filter((p: any) => typeof p?.text === 'string').map((p: any) => p.text).join('\\n');
+      if (role === 'assistant') {
+        if (calls.length) messages.push({ role: 'assistant', content: content || null, tool_calls: calls });
+        else if (content || item.content) messages.push({ role: 'assistant', content: content || item.content });
+      } else if (responses.length) {
+        for (const part of responses) messages.push({ role: 'tool', tool_call_id: 'call_' + (++toolSequence), name: part.functionResponse.name, content: JSON.stringify(part.functionResponse.response ?? {}) });
+      } else {
+        const userContent = content || (typeof item.content === 'string' ? item.content : '');
+        if (userContent) messages.push({ role: 'user', content: userContent });
+      }
+    }
+    const normalizeSchema = (schema: any): any => {
+      if (Array.isArray(schema)) return schema.map(normalizeSchema);
+      if (!schema || typeof schema !== 'object') return schema;
+      const out: any = {};
+      for (const [key, value] of Object.entries(schema)) out[key] = key === 'type' && typeof value === 'string' ? value.toLowerCase() : normalizeSchema(value);
+      return out;
+    };
+    const openAiTools = TOOL_DECLARATIONS.filter((tool: any) => tool.parameters).map((tool: any) => ({
+      type: 'function',
+      function: { name: tool.name, description: tool.description, parameters: normalizeSchema(tool.parameters) }
+    }));
 
     if (prov === 'openrouter' && !key) {
       throw new Error('کلید OpenRouter تنظیم نشده است. مدل‌های :free هم برای احراز هویت به کلید نیاز دارند؛ از openrouter.ai کلید رایگان بگیرید و در تنظیمات وارد کنید.');
@@ -834,7 +860,8 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
       body: JSON.stringify({
         model: currentModel(),
         messages,
-        temperature: 0.2
+        temperature: 0.2,
+        ...(openAiTools.length ? { tools: openAiTools, tool_choice: 'auto' } : {})
       })
     });
 
@@ -846,7 +873,7 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
       let errText = '';
       try {
         const errData = await res.json();
-        errText = errData?.error?.message || '';
+        errText = errData?.error?.message || errData?.message || JSON.stringify(errData).slice(0, 900) || '';
       } catch (_) {}
       throw new Error('خطای ' + res.status + ' از سرویس‌دهنده' + (errText ? ': ' + errText : '.'));
     }
@@ -856,10 +883,11 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
       const msg = data.choices[0].message;
       return {
         text: msg.content || '',
-        functionCalls: msg.tool_calls?.map((tc: any) => ({
-          name: tc.function?.name,
-          args: JSON.parse(tc.function?.arguments || '{}')
-        }))
+        functionCalls: msg.tool_calls?.map((tc: any) => {
+          let args: any = {};
+          try { args = JSON.parse(tc.function?.arguments || '{}'); } catch (_) {}
+          return { name: tc.function?.name, args };
+        })
       };
     }
     throw new Error(data.error?.message || 'دریافت پاسخ از سرویس‌دهنده ناموفق بود.');
@@ -1249,6 +1277,10 @@ app.get('/api/github/repos', async (req: Request, res: Response) => {
       return res.status(response.status).json({ error: errData.message || 'خطا در دریافت مخازن GitHub' });
     }
     const repos: any = await response.json();
+    const userResponse = await fetch('https://api.github.com/user', { headers: {
+      Authorization: `Bearer ${config.github_token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'Terminux-Agent'
+    }});
+    const user: any = userResponse.ok ? await userResponse.json() : null;
     const formatted = repos.map((r: any) => ({
       id: r.id,
       name: r.name,
@@ -1264,7 +1296,7 @@ app.get('/api/github/repos', async (req: Request, res: Response) => {
       default_branch: r.default_branch,
       updated_at: r.updated_at
     }));
-    res.json({ repos: formatted });
+    res.json({ user: user ? { login: user.login, name: user.name, html_url: user.html_url } : null, repos: formatted });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1274,13 +1306,13 @@ app.get('/api/github/repo-tree', async (req: Request, res: Response) => {
   if (!config.github_token) {
     return res.status(401).json({ error: 'توکن GitHub در تنظیمات ثبت نشده است.' });
   }
-  const { owner, repo, branch } = req.query;
-  if (!owner || !repo) {
-    return res.status(400).json({ error: 'نام مالک و مخزن الزامی است.' });
+  const { repo, branch, path: requestedPath } = req.query;
+  if (!repo || typeof repo !== 'string' || !/^[^/]+\\/[^/]+$/.test(repo)) {
+    return res.status(400).json({ error: 'نام مخزن باید به شکل owner/repo باشد.' });
   }
   try {
-    const ref = branch || 'main';
-    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${ref}?recursive=1`, {
+    const ref = encodeURIComponent(String(branch || 'main'));
+    const response = await fetch(`https://api.github.com/repos/${repo}/git/trees/${ref}?recursive=1`, {
       headers: {
         Authorization: `Bearer ${config.github_token}`,
         Accept: 'application/vnd.github+json',
@@ -1291,7 +1323,16 @@ app.get('/api/github/repo-tree', async (req: Request, res: Response) => {
       return res.status(response.status).json({ error: 'دریافت ساختار مخزن انجام نشد.' });
     }
     const data: any = await response.json();
-    res.json({ tree: data.tree?.slice(0, 100) || [] });
+    const prefix = requestedPath ? String(requestedPath).replace(/^\\/+|\\/+$/g, '') + '/' : '';
+    const entries = (data.tree || []).filter((entry: any) => {
+      if (!entry.path?.startsWith(prefix)) return false;
+      const rest = entry.path.slice(prefix.length);
+      return rest.length > 0 && !rest.slice(0, -1).includes('/');
+    }).slice(0, 200).map((entry: any) => ({
+      name: entry.path.slice(prefix.length).replace(/\\/$/, ''), path: entry.path,
+      type: entry.type === 'tree' ? 'dir' : 'file', size: entry.size || 0
+    }));
+    res.json({ entries, tree: entries });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1301,8 +1342,8 @@ app.get('/healthz', (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
-const PORT = 3000;
-const HOST = '0.0.0.0';
+const PORT = Number(process.env.PORT || 3000);
+const HOST = process.env.TERMINUX_HOST || '127.0.0.1';
 
 app.listen(PORT, HOST, () => {
   const localUrl = `http://localhost:${PORT}`;
