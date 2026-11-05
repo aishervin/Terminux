@@ -3,7 +3,7 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { exec, spawn } from 'child_process';
+import { exec, execSync, spawn } from 'child_process';
 import { GoogleGenAI } from '@google/genai';
 
 const app = express();
@@ -36,9 +36,8 @@ const PROVIDERS: Record<string, any> = {
     key_field: 'api_key',
     models: [
       { id: 'gemini-3.8-flash', note: 'پرچمدار چابک · پیش‌فرض ۲۰۲۶' },
-      { id: 'gemini-4-argon', note: 'قدرتمندترین مدل استدلال' },
-      { id: 'gemini-3.5-flash-lite', note: 'سبُک و فوق سریع' },
-      { id: 'gemini-3.8-pro', note: 'تعادل دقت و سرعت' }
+      { id: 'gemini-3.7-flash', note: 'نسخهٔ پایدار قبلی · سریع' },
+      { id: 'gemini-3.1-pro-preview', note: 'پرچمدار استدلال · فقط پولی (بدون tier رایگان)' }
     ]
   },
   mistral: {
@@ -47,8 +46,8 @@ const PROVIDERS: Record<string, any> = {
     endpoint: 'https://api.mistral.ai/v1/chat/completions',
     key_field: 'mistral_api_key',
     models: [
-      { id: 'mistral-large-latest', note: 'پرچمدار هوشمند' },
-      { id: 'mistral-small-latest', note: 'چابک و بهینه' },
+      { id: 'mistral-large-4', note: 'پرچمدار · پیش‌نمایش، ممکن است روی کلید شما فعال نباشد' },
+      { id: 'mistral-small-2603', note: 'چابک و بهینه · مناسب کلید رایگان' },
       { id: 'codestral-latest', note: 'تخصصی کدنویسی' }
     ]
   },
@@ -58,8 +57,8 @@ const PROVIDERS: Record<string, any> = {
     endpoint: 'https://api.deepseek.com/v1/chat/completions',
     key_field: 'deepseek_api_key',
     models: [
-      { id: 'deepseek-chat', note: 'DeepSeek-V3 · عمومی و کدنویسی' },
-      { id: 'deepseek-reasoner', note: 'DeepSeek-R1 · استدلال عمیق' }
+      { id: 'deepseek-v4-flash', note: 'DeepSeek V4 Flash · عمومی و کدنویسی' },
+      { id: 'deepseek-v4-pro', note: 'DeepSeek V4 Pro · استدلال عمیق' }
     ]
   },
   openrouter: {
@@ -68,9 +67,10 @@ const PROVIDERS: Record<string, any> = {
     endpoint: 'https://openrouter.ai/api/v1/chat/completions',
     key_field: 'openrouter_api_key',
     models: [
-      { id: 'google/gemini-2.0-flash-exp:free', note: 'Gemini Flash · رایگان' },
-      { id: 'meta-llama/llama-3.3-70b-instruct:free', note: 'Llama 3.3 70B · رایگان' },
-      { id: 'deepseek/deepseek-r1:free', note: 'DeepSeek R1 · رایگان' }
+      { id: 'nvidia/nemotron-3.5-lightning:free', note: 'سبک و سریع · رایگان' },
+      { id: 'nvidia/nemotron-3.5-super-vl:free', note: 'چندوجهی · رایگان' },
+      { id: 'cohere/north-mini-code:free', note: 'تخصصی کدنویسی · رایگان' },
+      { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', note: 'استدلال سبک · رایگان' }
     ]
   },
   pollinations: {
@@ -80,19 +80,91 @@ const PROVIDERS: Record<string, any> = {
     key_field: '',
     free: true,
     models: [
-      { id: 'openai', note: 'بدون توکن · رایگان' },
-      { id: 'qwen-coder', note: 'Qwen Coder · کدنویسی رایگان' }
+      { id: 'openai', note: 'بدون توکن · رایگان · سقف ۱ پاسخ در ۴۵ ثانیه' },
+      { id: 'openai-fast', note: 'بدون توکن · سریع‌ترین' }
     ]
   }
 };
 
 const DEFAULT_MODELS: Record<string, string> = {
   gemini: 'gemini-3.8-flash',
-  mistral: 'mistral-small-latest',
-  deepseek: 'deepseek-chat',
-  openrouter: 'google/gemini-2.0-flash-exp:free',
+  mistral: 'mistral-small-2603',
+  deepseek: 'deepseek-v4-flash',
+  openrouter: 'nvidia/nemotron-3.5-lightning:free',
   pollinations: 'openai'
 };
+
+// شناسه‌های بازنشسته → جایگزین معتبر (گارد زمان اجرا برای جلوگیری از 404 مدل‌های مرده)
+const RETIRED_MODELS: Record<string, string> = {
+  'gemini-2.5-flash': 'gemini-3.8-flash',
+  'gemini-2.0-flash': 'gemini-3.8-flash',
+  'gemini-4-argon': 'gemini-3.8-flash',
+  'gemini-3.5-flash-lite': 'gemini-3.8-flash',
+  'gemini-3.8-pro': 'gemini-3.1-pro-preview',
+  'mistral-large-latest': 'mistral-large-4',
+  'mistral-small-latest': 'mistral-small-2603',
+  'deepseek-chat': 'deepseek-v4-flash',
+  'deepseek-reasoner': 'deepseek-v4-pro',
+  'google/gemini-2.0-flash-exp:free': 'nvidia/nemotron-3.5-lightning:free',
+  'meta-llama/llama-3.3-70b-instruct:free': 'nvidia/nemotron-3.5-lightning:free',
+  'deepseek/deepseek-r1:free': 'nvidia/nemotron-3.5-lightning:free',
+  'qwen3-coder:free': 'cohere/north-mini-code:free',
+  'qwen-coder': 'openai',
+  'openai-large': 'openai',
+  'openai-fast-large': 'openai-fast',
+  'llama': 'openai',
+  'deepseek': 'openai',
+  'mistral': 'openai'
+};
+
+function currentModel(): string {
+  const prov = config.provider || 'gemini';
+  const raw = config.model || DEFAULT_MODELS[prov] || DEFAULT_MODELS.gemini;
+  return RETIRED_MODELS[raw] || raw;
+}
+
+function migrateRetiredModel(): void {
+  const raw = config.model;
+  if (raw && RETIRED_MODELS[raw]) {
+    config.model = currentModel();
+    saveConfig();
+    console.log('مدل بازنشسته «' + raw + '» به «' + config.model + '» مهاجرت داده شد.');
+  }
+}
+
+// لیست زندهٔ مدل‌های Pollinations (کش یک‌ساعته، در صورت خطا فهرست ایستا)
+let pollinationsCache: { at: number; models: any[] } | null = null;
+async function pollinationsModels(): Promise<any[]> {
+  const now = Date.now();
+  if (pollinationsCache && now - pollinationsCache.at < 3600_000) {
+    return pollinationsCache.models;
+  }
+  try {
+    const res = await fetch('https://text.pollinations.ai/models', {
+      signal: AbortSignal.timeout(10000)
+    });
+    if (res.ok) {
+      const list = await res.json();
+      const models = (Array.isArray(list) ? list : [])
+        .filter((m: any) => m && (m.name || m.id))
+        .map((m: any) => ({ id: m.name || m.id, note: 'زنده از Pollinations' }));
+      if (models.length) {
+        pollinationsCache = { at: now, models };
+        return models;
+      }
+    }
+  } catch (_) {}
+  return PROVIDERS.pollinations.models;
+}
+
+function ttsBinaryAvailable(): boolean {
+  try {
+    execSync('command -v termux-tts-speak', { stdio: 'ignore' });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 
 const TOOL_DECLARATIONS = [
   {
@@ -314,6 +386,7 @@ function loadConfig() {
   }
 }
 loadConfig();
+migrateRetiredModel();
 
 function saveConfig() {
   try {
@@ -609,7 +682,7 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
 
     try {
       const response = await ai.models.generateContent({
-        model: config.model || 'gemini-3.8-flash',
+        model: currentModel(),
         contents,
         config: {
           systemInstruction: SYSTEM_PROMPT,
@@ -666,11 +739,15 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
       method: 'POST',
       headers,
       body: JSON.stringify({
-        model: config.model || DEFAULT_MODELS[prov] || 'openai',
+        model: currentModel(),
         messages,
         temperature: 0.2
       })
     });
+
+    if (prov === 'pollinations' && res.status === 429) {
+      throw new Error('پولینیشنز بدون توکن فقط هر ۴۵ ثانیه یک پاسخ می‌دهد؛ کمی صبر کنید و دوباره بفرستید.');
+    }
 
     const data = await res.json();
     if (data.choices && data.choices[0] && data.choices[0].message) {
@@ -793,7 +870,7 @@ app.get('/api/state', (req: Request, res: Response) => {
     model: config.model,
     providerConfigured: isProviderConfigured(config.provider || 'gemini'),
     workspace: WORKSPACE_DIR,
-    ttsAvailable: false
+    ttsAvailable: ttsBinaryAvailable()
   });
 });
 
@@ -806,18 +883,18 @@ app.get('/api/history', (req: Request, res: Response) => {
   });
 });
 
-app.get('/api/models', (req: Request, res: Response) => {
-  const providerList = Object.entries(PROVIDERS).map(([id, info]) => ({
+app.get('/api/models', async (req: Request, res: Response) => {
+  const providerList = await Promise.all(Object.entries(PROVIDERS).map(async ([id, info]) => ({
     id,
     label: info.label,
     free: Boolean(info.free),
     configured: isProviderConfigured(id),
-    models: info.models
-  }));
+    models: id === 'pollinations' ? await pollinationsModels() : info.models
+  })));
   res.json({
     providers: providerList,
     provider: config.provider || 'gemini',
-    model: config.model
+    model: currentModel()
   });
 });
 
@@ -996,7 +1073,24 @@ app.post('/api/clear', (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+let ttsChild: ReturnType<typeof spawn> | null = null;
+
 app.post('/api/speak', (req: Request, res: Response) => {
+  const { text, stop } = req.body || {};
+  if (stop) {
+    try { exec('pkill -f termux-tts-speak'); } catch (_) {}
+    if (ttsChild) { try { ttsChild.kill(); } catch (_) {} ttsChild = null; }
+    return res.json({ ok: true });
+  }
+  if (!text || typeof text !== 'string' || !text.trim()) {
+    return res.status(400).json({ error: 'متن برای خواندن ارسال نشده است.' });
+  }
+  if (!ttsBinaryAvailable()) {
+    return res.status(500).json({ error: 'termux-tts-speak در دسترس نیست. بستهٔ Termux:API و اپ اندرویدش لازم است (pkg install termux-api).' });
+  }
+  try { exec('pkill -f termux-tts-speak'); } catch (_) {}
+  ttsChild = spawn('termux-tts-speak', [String(text).slice(0, 4000)], { stdio: 'ignore' });
+  ttsChild.on('error', () => { ttsChild = null; });
   res.json({ ok: true });
 });
 
