@@ -39,7 +39,7 @@ EOF
 chmod 700 "$PREFIX_BIN/terminux"
 step "۵/۵ · آماده‌سازی فضای کاری"
 printf "\n  ${OK}${B}✓ نصب با موفقیت تمام شد${R}\n"
-printf "  ${G}پوشه برنامه: ${R}%s\n  ${G}فضای کاری:  ${R}%s\n  ${G}اجرا:        ${O}terminux${R}\n  ${G}نشانی:      ${W}http://127.0.0.1:3000${R}\n\n"
+printf "  ${G}پوشه برنامه: ${R}%s\n  ${G}فضای کاری:  ${R}%s\n  ${G}اجرا:        ${O}terminux${R}\n  ${G}نشانی:      ${W}http://127.0.0.1:3000${R}\n\n" "$INSTALL_DIR" "$WORKSPACE_DIR"
 cd "$INSTALL_DIR"
 export TERMINUX_WORKSPACE="$WORKSPACE_DIR"
 printf "  ${O}در حال راه‌اندازی Terminux…${R}\n"
