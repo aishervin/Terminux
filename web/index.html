@@ -129,7 +129,7 @@ mask-image:linear-gradient(to bottom,transparent 0%,black 25px,black calc(100% -
    and the handle slides over it (label fades while dragging). */
 .cap-in.approval{gap:0}
 .cap-in.approval #prompt,.cap-in.approval .clip{display:none!important}
-.cap-in.approval .drag-container{flex:1 1 auto;width:100%;min-height:44px;justify-content:flex-end}
+.cap-in.approval .drag-container{flex:1 1 auto;width:100%;min-height:44px;justify-content:flex-start}
 .drag-hint{pointer-events:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:8px;font:700 12px/1 var(--mono);letter-spacing:.14em;background:linear-gradient(90deg,#ff4500 0%,#ffaa00 35%,#ffffff 50%,#ffaa00 65%,#ff4500 100%);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:dragGlow 1.8s linear infinite;filter:drop-shadow(0 0 8px rgba(255,120,0,.7));transition:opacity .15s ease-out;z-index:1}
 .drag-arrows{display:inline-block;animation:arrowPulse 1.2s ease-in-out infinite alternate}
 @keyframes dragGlow{0%{background-position:0% center}100%{background-position:200% center}}
@@ -669,6 +669,8 @@ function richBlocks(text){
         if(promptBox.dataset.ph!==undefined){promptBox.placeholder=promptBox.dataset.ph;delete promptBox.dataset.ph;}
         if(sendButton.dataset.ph!==undefined){delete sendButton.dataset.ph;}
         promptBox.disabled=false;
+        sendButton.style.transform='';
+        dragHint.style.opacity='1';
         if(!sendButton.classList.contains('blinking'))sendButton.textContent='>_';
       }
     }
