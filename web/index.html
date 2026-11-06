@@ -196,6 +196,39 @@ dialog{border:1px solid #2c3036;border-radius:0;background:rgba(10,11,12,.94);ba
 @media(max-width:680px){.files-body{grid-template-columns:1fr;grid-template-rows:minmax(150px,36%) 1fr}.file-sidebar{border-inline-end:0;border-bottom:1px solid var(--line)}.message.user{max-width:96%}}
 @media(max-width:680px){.menu{padding:56px 14px calc(150px + env(safe-area-inset-bottom,0px))}.mp{width:min(100%,340px)}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* ===== v0.4 UI refinements ===== */
+.stage{padding-bottom:30vh;gap:22px}
+/* model selector: plain small text, no box */
+.model-row{min-height:16px;margin:0 0 2px;padding:0 14px}
+.model-chip{border:0!important;background:none!important;padding:0!important;min-height:0!important;border-radius:0!important;font:400 10px var(--mono)!important;opacity:.8}
+.model-chip b{font:400 10px var(--mono);text-shadow:none;letter-spacing:.06em}
+/* permission card: always visible, no entrance animation */
+.command-card{animation:none!important;opacity:1!important;transform:none!important}
+.command-card .command-head{display:flex;justify-content:space-between}
+.command-card.waiting .command-head{color:#d6dae0}
+.command-card.waiting .command-head::after{content:"";width:7px;height:7px;border-radius:50%;background:#8b919a;animation:pulse .9s ease-in-out infinite}
+.command-card.approved .command-head{color:#6fd49a}
+.command-card.declined .command-head{color:#e07a7a}
+.command-card.expired .command-head{color:var(--dim)}
+/* incoming-call style approval track */
+.cap-in{position:relative}
+.appr{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:#0a0b0c;border-radius:14px;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;--g:.55;--r:.55;direction:ltr}
+.appr[hidden]{display:none}
+.appr::before,.appr::after{content:"";position:absolute;top:0;bottom:0;width:62%;pointer-events:none;transition:opacity .12s linear}
+.appr::before{right:0;background:radial-gradient(130% 150% at 100% 50%,rgba(52,235,125,.8),rgba(52,235,125,.25) 42%,transparent 72%);opacity:var(--g)}
+.appr::after{left:0;background:radial-gradient(130% 150% at 0% 50%,rgba(255,66,66,.8),rgba(255,66,66,.25) 42%,transparent 72%);opacity:var(--r)}
+.appr-lab{position:relative;z-index:2;font:600 12px var(--mono);letter-spacing:.14em;color:#8b919a;transition:color .15s}
+.appr.hot-r .appr-lab.r,.appr.hot-l .appr-lab.l{color:#d9dde3}
+.appr-knob{all:unset;box-sizing:border-box;position:absolute;z-index:3;left:50%;top:50%;width:48px;height:48px;margin:-24px 0 0 -24px;display:grid;place-items:center;cursor:grab;background:linear-gradient(135deg,#f4f6f8,#8d939b 45%,#cfd3d9 70%,#5b6168);color:#060606;font:700 14px var(--mono);clip-path:polygon(12px 0,calc(100% - 12px) 0,100% 12px,100% calc(100% - 12px),calc(100% - 12px) 100%,12px 100%,0 calc(100% - 12px),0 12px);box-shadow:0 0 18px rgba(220,230,245,.4);touch-action:none}
+.appr-knob:active{cursor:grabbing}
+.appr-knob:focus-visible{outline:2px solid #cfd3d9;outline-offset:2px}
+.appr.snap .appr-knob{transition:transform .22s cubic-bezier(.2,.8,.2,1)}
+/* thinking: one transient line instead of piled-up cards */
+.think-line{display:flex;align-items:center;gap:8px;align-self:center;margin:6px 0;font:400 12px var(--mono);color:#a99bd9;direction:auto}
+.think-dot{width:6px;height:6px;border-radius:50%;background:#b9a6ff;box-shadow:0 0 8px #b9a6ff;animation:pulse .9s ease-in-out infinite}
+.think-step{font-size:10px;color:var(--dim);letter-spacing:.1em}
+.tool-line{align-self:stretch;margin:4px 0;padding:0 4px;font:400 11.5px var(--mono);color:var(--dim);direction:ltr;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -228,6 +261,7 @@ dialog{border:1px solid #2c3036;border-radius:0;background:rgba(10,11,12,.94);ba
       <button class="send" id="sendButton" type="button" aria-label="ارسال">&gt;_</button>
       <div class="drag-hint" id="dragHint" dir="ltr" hidden aria-hidden="true"><span class="drag-arrows">&lt;&lt;&lt;</span><span class="drag-text">Drag to Run</span></div>
     </div>
+    <div class="appr" id="appr" hidden aria-hidden="true"><span class="appr-lab l">Decline</span><button class="appr-knob" id="apprKnob" type="button" aria-label="به راست بکش: اجرا · به چپ بکش: لغو">&gt;_</button><span class="appr-lab r">Accept</span></div>
     <textarea id="prompt" rows="1" dir="rtl" placeholder="تو اشاره کن، من رنده‌ش می‌کنم..." aria-label="پیام به ایجنت"></textarea>
     <label class="clip" aria-label="پیوست فایل"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5l-8.6 8.6a5 5 0 01-7-7l9-9a3.3 3.3 0 014.7 4.7l-9 9a1.7 1.7 0 01-2.4-2.4l8.3-8.3"/></svg><input type="file" id="fileInput" multiple aria-label="انتخاب فایل"></label>
   </div></div>
@@ -542,7 +576,16 @@ function richBlocks(text){
       if(tone)card.classList.add(tone);
       return card;
     }
+    let thinkEl=null;
+    function clearThinking(){if(thinkEl){thinkEl.remove();thinkEl=null;}}
     function appendThinking(event){
+      document.querySelector('#welcome')?.remove();
+      if(!thinkEl){thinkEl=el('div','think-line');thinkEl.append(el('span','think-dot'),el('span','think-text'),el('span','think-step'));feed.append(thinkEl);}
+      thinkEl.querySelector('.think-text').textContent=event.text||event.output||'در حال فکر کردن…';
+      thinkEl.querySelector('.think-step').textContent=event.step?`STEP ${event.step}`:'';
+      keepFeedAtBottom();
+    }
+    function appendThinkingCard(event){
       const follow=feedIsNearBottom();
       document.querySelector('#welcome')?.remove();
       const card=collapsibleProcessCard({
@@ -564,7 +607,7 @@ function richBlocks(text){
         title:'لاگ فرایند',
         badge:String(event.tool||event.source||'process'),
         body:pre,
-        collapsed:false
+        collapsed:String(event.text||event.output||'').split('\n').length>8
       });
       feed.append(card);keepFeedAtBottom(follow);
     }
@@ -598,76 +641,43 @@ function richBlocks(text){
     function appendToolCall(event){
       const follow=feedIsNearBottom();
       document.querySelector('#welcome')?.remove();
-      const code=el('pre','command-code');code.dir='ltr';code.append(hl(String(event.command||'')));
-      const card=collapsibleProcessCard({
-        extraClass:'done',
-        title:'فراخوانی ابزار',
-        badge:String(event.tool||'shell'),
-        body:code,
-        collapsed:false
-      });
-      if(event.cwd)card.querySelector('.process-head').append(el('span','log-meta',String(event.cwd)));
-      feed.append(card);keepFeedAtBottom(follow);
+      feed.append(el('div','tool-line','▶ '+String(event.command||'')));
+      keepFeedAtBottom(follow);
     }
-    function appendGenericEvent(event){
-      const follow=feedIsNearBottom();
-      document.querySelector('#welcome')?.remove();
-      const body=event.text||event.output||JSON.stringify(event);
-      const card=collapsibleProcessCard({
-        extraClass:'event-card',
-        title:String(event.type||'رویداد'),
-        badge:event.id?`#${event.id}`:'',
-        body:String(body),
-        collapsed:false
-      });
-      feed.append(card);keepFeedAtBottom(follow);
-    }
+    function appendGenericEvent(event){ /* رویدادهای ناشناخته نمایش داده نمی‌شوند */ }
+    const appr=document.querySelector('#appr'),apprKnob=document.querySelector('#apprKnob');
     function updateApprovalUI(){
-      if(pending&&!approvalInFlight){
-        sendButton.classList.add('approval-mode');
-        sendButton.classList.remove('blinking');
-        sendButton.disabled=false;
-        dragHint.hidden=false;
-        dragHint.style.opacity='1';
-        setComposerApproval(true);
-        sendButton.title='برای اجرای فرمان، به سمت داخل بکشید (Drag to Run)';
-      }else if(approvalInFlight || (isRunning && sendButton.dataset.approvedCommand==='true')){
-        sendButton.classList.remove('approval-mode');
+      const waiting=!!pending&&!approvalInFlight;
+      appr.hidden=!waiting;appr.setAttribute('aria-hidden',String(!waiting));
+      if(waiting){
+        sendButton.disabled=true;
+        if(document.activeElement===promptBox)promptBox.blur();
+        return;
+      }
+      if(approvalInFlight||(isRunning&&sendButton.dataset.approvedCommand==='true')){
         sendButton.classList.add('blinking');
         sendButton.disabled=true;
-        dragHint.hidden=true;
-        setComposerApproval(false);
         sendButton.textContent='';
         sendButton.title='در حال اجرای فرمان در ترمینال…';
       }else{
-        sendButton.classList.remove('approval-mode','blinking');
+        sendButton.classList.remove('blinking');
         sendButton.dataset.approvedCommand='false';
-        dragHint.hidden=true;
-        setComposerApproval(false);
-        sendButton.title='ارسال';
         updateSend();
       }
     }
-    function setComposerApproval(on){
-      if(on){
-        if(promptBox.dataset.ph===undefined){promptBox.dataset.ph=promptBox.placeholder||'';}
-        promptBox.placeholder='';
-        sendButton.textContent='';
-      }else{
-        if(promptBox.dataset.ph!==undefined){promptBox.placeholder=promptBox.dataset.ph;delete promptBox.dataset.ph;}
-        sendButton.style.transform='';
-        dragHint.style.opacity='1';
-        if(!sendButton.classList.contains('blinking'))sendButton.textContent='>_';
-      }
-    }
     function appendCommand(command,id){
-      document.querySelector('#welcome')?.remove();const card=el('article','command-card');card.dataset.approvalId=String(id);card.append(el('div','command-head','درخواست تأیید فرمان'));
-      const code=el('pre','command-code');code.dir='ltr';code.append(hl(command));card.append(code);const actions=el('div','command-actions');
-      const approve=el('button','action primary','اجرا'),reject=el('button','action reject','رد');
-      approve.onclick=()=>{sendButton.dataset.approvedCommand='true';decide(id,true,approve,reject);};
-      reject.onclick=()=>decide(id,false,approve,reject);
-      actions.append(approve,reject);card.append(actions);feed.append(card);keepFeedAtBottom(true);
+      document.querySelector('#welcome')?.remove();
+      const card=el('article','command-card waiting');card.dataset.approvalId=String(id);
+      card.append(el('div','command-head','درخواست تأیید فرمان'));
+      const code=el('pre','command-code');code.dir='ltr';code.append(hl(command));card.append(code);
+      feed.append(card);keepFeedAtBottom(true);
       updateApprovalUI();
+    }
+    function markCommandCard(id,state,label){
+      const card=document.querySelector(`.command-card[data-approval-id="${id}"]`);
+      if(!card)return;
+      card.classList.remove('waiting','approved','declined','expired');card.classList.add(state);
+      const head=card.querySelector('.command-head');if(head)head.textContent=label;
     }
     async function decide(id,approved,...buttons){
       buttons.forEach(button=>button.disabled=true);
@@ -675,8 +685,10 @@ function richBlocks(text){
       updateApprovalUI();
       try{
         if(approved)sendButton.dataset.approvedCommand='true';
+        if(promptBox===document.activeElement)promptBox.blur();
         await api('/api/approval',{id,approved});
         pending=null;
+        markCommandCard(id,approved?'approved':'declined',approved?'فرمان تأیید شد':'فرمان رد شد');
       }catch(error){
         appendMessage('error',error.message,'ERROR');
         buttons.forEach(button=>button.disabled=false);
@@ -697,7 +709,8 @@ function richBlocks(text){
       const output=event.output||'(بدون خروجی)';
       const pre=el('pre','log-text');pre.dir='ltr';pre.append(hlLog(output));
       const wrap=el('div','collapsible');wrap.append(pre);
-      const toggle=el('button','log-toggle','جمع کردن لاگ');
+      const longLog=output.split('\n').length>14;if(longLog)wrap.setAttribute('hidden','');
+      const toggle=el('button','log-toggle',longLog?'نمایش لاگ':'جمع کردن لاگ');
       toggle.type='button';
       toggle.onclick=()=>{const hidden=wrap.hasAttribute('hidden');if(hidden){wrap.removeAttribute('hidden');toggle.textContent='جمع کردن لاگ';}else{wrap.setAttribute('hidden','');toggle.textContent='نمایش لاگ';}};
       details.append(toggle,wrap);
@@ -746,6 +759,10 @@ function richBlocks(text){
         liveTermText.scrollTop=liveTermText.scrollHeight;
       }
     }
+    function discardLiveTerminal(){
+      if(liveTermTimer){clearInterval(liveTermTimer);liveTermTimer=null;}
+      if(liveTermCard){liveTermCard.remove();liveTermCard=null;liveTermText=null;}
+    }
     function finishLiveTerminal(){
       if(liveTermTimer){clearInterval(liveTermTimer);liveTermTimer=null;}
       if(liveTermCard){
@@ -760,7 +777,7 @@ function richBlocks(text){
     }
 
     const EVENT_RENDERERS={
-      user:event=>appendMessage('user',event.text,'شما',event.attachments||[]),
+      user:event=>appendMessage('user',event.text,'من',event.attachments||[]),
       assistant:event=>{
         appendMessage('assistant',event.text,'SHΞN™');
         speak(event.text);
@@ -788,7 +805,7 @@ function richBlocks(text){
         appendLiveChunk(event.chunk);
       },
       command_result:renderResult,
-      status:event=>{setRunning(event.running);if(!event.running){finishLiveTerminal();pending=null;sendButton.dataset.approvedCommand='false';}}
+      status:event=>{setRunning(event.running);if(!event.running){clearThinking();finishLiveTerminal();pending=null;sendButton.dataset.approvedCommand='false';}}
     };
     function renderPermission(event){
       const aid=event.approval_id??event.id;
@@ -796,13 +813,14 @@ function richBlocks(text){
       if(!pending||pending.id!==aid){pending={id:aid,command};appendCommand(command||'(فرمان خالی)',aid);}
     }
     function renderResult(event){
-      finishLiveTerminal();
+      discardLiveTerminal();
       appendOutput(event);
       document.querySelector('#activity').textContent='';
       sendButton.dataset.approvedCommand='false';
     }
     function renderEvent(event){
       if(event.id)lastEventId=Math.max(lastEventId,event.id);
+      if(event.type!=='thinking'&&event.type!=='step'&&event.type!=='command_chunk')clearThinking();
       const renderer=EVENT_RENDERERS[event.type];
       if(renderer)renderer(event);
       else appendGenericEvent(event);
@@ -820,8 +838,8 @@ function richBlocks(text){
         if(state.pending&&(!pending||pending.id!==state.pending.id)){pending={id:state.pending.id,command:state.pending.command};appendCommand(state.pending.command,state.pending.id);}
         if(pending&&state.pending===null)pending=null;
         const activeApproval=state.pending?state.pending.id:null;
-        document.querySelectorAll('.command-card[data-approval-id]').forEach(card=>{
-          if(Number(card.dataset.approvalId)!==activeApproval)card.querySelectorAll('.action').forEach(button=>button.disabled=true);
+        document.querySelectorAll('.command-card.waiting').forEach(card=>{
+          if(Number(card.dataset.approvalId)!==activeApproval)markCommandCard(card.dataset.approvalId,'expired','درخواست پایان یافت');
         });
         document.querySelector('#statusText').textContent=state.running?'در حال پردازش':'آماده';
         document.querySelector('#statusDot').classList.toggle('busy',!!state.running);
@@ -854,9 +872,10 @@ function richBlocks(text){
         chip.append(el('span','',file.name));const remove=el('button','','×');remove.type='button';remove.setAttribute('aria-label',`حذف ${file.name}`);remove.onclick=()=>{uploads.splice(index,1);renderSelectedFiles();updateSend();};chip.append(remove);selectedFiles.append(chip);});
     }
     function updateSend(){
-      if(pending)return;
-      if(isRunning){sendButton.disabled=false;return;}
-      sendButton.disabled=uploading>0||(!promptBox.value.trim()&&!uploads.length);
+      if(pending&&!approvalInFlight)return;
+      sendButton.disabled=uploading>0||(!isRunning&&!promptBox.value.trim()&&!uploads.length);
+      if(!sendButton.classList.contains('blinking'))sendButton.textContent=isRunning?'■':'>_';
+      sendButton.title=isRunning?'توقف':'ارسال';
     }
     async function uploadSelection(files){
       const remaining=Math.max(0,5-uploads.length-uploading),chosen=files.slice(0,remaining);if(files.length>remaining)appendMessage('error','حداکثر ۵ فایل برای هر پیام.','بارگذاری');
@@ -867,63 +886,57 @@ function richBlocks(text){
     async function sendPrompt(){
       if(pending)return;
       const message=promptBox.value.trim();if(isRunning||uploading||(!message&&!uploads.length))return;
-      try{await api('/api/chat',{message,attachments:uploads});promptBox.value='';promptBox.dispatchEvent(new Event('input'));uploads=[];renderSelectedFiles();updateSend();promptBox.focus();}
+      try{await api('/api/chat',{message,attachments:uploads});promptBox.value='';promptBox.dispatchEvent(new Event('input'));uploads=[];renderSelectedFiles();promptBox.blur();updateSend();}
       catch(error){appendMessage('error',error.message,'ERROR');}
     }
 
-    /* Drag to Run Gesture Handler */
-    let dragStartX=0,isDraggingSend=false,currentMaxDrag=100;
-    sendButton.onclick = async () => {
-      if(dragMoved){dragMoved=false;return;}
-      if(pending)return;
-      if (isRunning) {
-        try {
-          await api('/api/stop', {});
-        } catch (err) {
-          console.error('Failed to stop:', err);
-        }
-      } else {
-        await sendPrompt();
-      }
+    sendButton.onclick=async()=>{
+      if(pending&&!approvalInFlight)return;
+      if(isRunning){try{await api('/api/stop',{});}catch(err){console.error('Failed to stop:',err);}}
+      else await sendPrompt();
     };
-    sendButton.addEventListener('pointerdown',e=>{
-      if(!pending)return;
-      isDraggingSend=true;
-      dragMoved=false;
-      dragStartX=e.clientX;
-      currentMaxDrag=Math.max(70,promptBox.clientWidth*0.25);
-      try{sendButton.setPointerCapture(e.pointerId);}catch(_){}
-      sendButton.style.transition='none';
+    /* Accept / Decline slider (incoming-call style): right = accept, left = decline */
+    let apprStart=null,apprMax=100;
+    function apprPaint(dx){
+      const t=Math.min(1,Math.abs(dx)/apprMax);
+      apprKnob.style.transform=`translateX(${dx}px)`;
+      appr.style.setProperty('--g',String(dx>0?.55+.45*t:.55-.4*t));
+      appr.style.setProperty('--r',String(dx<0?.55+.45*t:.55-.4*t));
+      appr.classList.toggle('hot-r',dx>0&&t>.5);appr.classList.toggle('hot-l',dx<0&&t>.5);
+    }
+    function apprReset(){appr.classList.add('snap');apprPaint(0);setTimeout(()=>appr.classList.remove('snap'),260);}
+    async function apprFinish(approved){
+      if(!pending||approvalInFlight){apprReset();return;}
+      const id=pending.id;
+      appr.classList.add('snap');apprPaint(approved?apprMax:-apprMax);
+      try{navigator.vibrate&&navigator.vibrate(approved?[18]:[10,40,10]);}catch(_){}
+      await decide(id,approved);
+      appr.classList.remove('snap','hot-r','hot-l');apprPaint(0);
+    }
+    appr.addEventListener('pointerdown',e=>{
+      if(!pending||approvalInFlight)return;
+      apprMax=Math.max(60,appr.clientWidth/2-40);
+      apprStart=e.clientX;appr.classList.remove('snap');
+      try{appr.setPointerCapture(e.pointerId);}catch(_){}
       e.preventDefault();
     });
-    sendButton.addEventListener('pointermove',e=>{
-      if(!isDraggingSend||!pending)return;
-      const inwardDeltaX=Math.max(0,dragStartX-e.clientX);
-      if(inwardDeltaX>4)dragMoved=true;
-      const clampDist=Math.min(inwardDeltaX,currentMaxDrag);
-      sendButton.style.transform=`translateX(-${clampDist}px)`;
-      dragHint.style.opacity=String(Math.max(0,1-(clampDist/currentMaxDrag)));
+    appr.addEventListener('pointermove',e=>{
+      if(apprStart===null)return;
+      apprPaint(Math.max(-apprMax,Math.min(apprMax,e.clientX-apprStart)));
     });
-    async function handlePointerEnd(e){
-      if(!isDraggingSend)return;
-      isDraggingSend=false;
-      try{sendButton.releasePointerCapture(e.pointerId);}catch(_){}
-      const inwardDeltaX=Math.max(0,dragStartX-e.clientX);
-      const threshold=currentMaxDrag*0.55;
-      if(pending&&inwardDeltaX>=threshold){
-        const pendingId=pending.id;
-        sendButton.style.transition='transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)';
-        sendButton.style.transform='';
-        dragHint.style.opacity='0';
-        await decide(pendingId,true);
-      }else{
-        sendButton.style.transition='transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)';
-        sendButton.style.transform='';
-        if(pending){dragHint.style.opacity='1';setComposerApproval(true);}
-      }
+    function apprEnd(e){
+      if(apprStart===null)return;
+      const dx=e.clientX-apprStart;apprStart=null;
+      try{appr.releasePointerCapture(e.pointerId);}catch(_){}
+      if(e.type!=='pointercancel'&&dx>=apprMax*.7)apprFinish(true);
+      else if(e.type!=='pointercancel'&&dx<=-apprMax*.7)apprFinish(false);
+      else apprReset();
     }
-    sendButton.addEventListener('pointerup',handlePointerEnd);
-    sendButton.addEventListener('pointercancel',handlePointerEnd);
+    appr.addEventListener('pointerup',apprEnd);appr.addEventListener('pointercancel',apprEnd);
+    apprKnob.addEventListener('keydown',e=>{
+      if(e.key==='ArrowRight'){e.preventDefault();apprFinish(true);}
+      if(e.key==='ArrowLeft'){e.preventDefault();apprFinish(false);}
+    });
 
     function parentPath(path){const parts=path.split('/').filter(Boolean);parts.pop();return parts.join('/')||'.';}
     async function loadFiles(path){
