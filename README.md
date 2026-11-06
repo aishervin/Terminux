@@ -6,7 +6,7 @@
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aishervin/Terminux/main/install.sh | bash
-terminux            # اجرا؛ رابط روی http://127.0.0.1:3000
+terminux            
 ```
 
 ## اجرای دستی
