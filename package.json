@@ -1,13 +1,13 @@
 {
   "name": "terminux",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "build": "tsc",
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
     "lint": "tsc --noEmit",
-    "start": "tsx server.ts"
+    "check": "tsc --noEmit"
   },
   "dependencies": {
     "@google/genai": "^2.32.0",
@@ -18,5 +18,14 @@
     "express": "^5.3.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
+  },
+  "description": "A local AI coding and terminal agent with a Persian web interface (Termux-friendly)",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aishervin/Terminux.git"
   }
 }

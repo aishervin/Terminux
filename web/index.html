@@ -223,7 +223,7 @@ dialog{border:1px solid #2c3036;border-radius:0;background:rgba(10,11,12,.94);ba
       <div class="dialog-title"><h2>تنظیمات</h2><button class="close-btn" type="button" id="cancelSettings">بستن</button></div>
       <p class="security-note">کلیدها روی همین دستگاه ذخیره می‌شوند. فرمان‌های shell با دسترسی Termux اجرا می‌شوند؛ خروجی فرمان ممکن است به مدل برسد.</p>
       <div class="field"><label for="apiKey">Gemini API key</label><input id="apiKey" type="password" autocomplete="off" placeholder="کلید Gemini، شامل قالب AQ.… یا قالب‌های قدیمی"><label class="forget"><input id="clearApiKey" type="checkbox"> پاک‌کردن کلید ذخیره‌شده</label></div>
-      <div class="field"><label for="model">مدل (انتخاب اصلی از دکمهٔ model روی چت)</label><input id="model" value="gemini-2.5-flash" spellcheck="false"></div>
+      <div class="field"><label for="model">مدل (انتخاب اصلی از دکمهٔ model روی چت)</label><input id="model" value="gemini-3.8-flash" spellcheck="false"></div>
       <div class="field"><label for="mistralApiKey">Mistral API key</label><input id="mistralApiKey" type="password" autocomplete="off" placeholder="کلید Mistral"><a class="key-link" href="https://console.mistral.ai/api-keys" target="_blank" rel="noreferrer">دریافت کلید ↗</a><label class="forget"><input id="clearMistralApiKey" type="checkbox"> پاک‌کردن کلید ذخیره‌شده</label></div>
       <div class="field"><label for="deepseekApiKey">DeepSeek API key</label><input id="deepseekApiKey" type="password" autocomplete="off" placeholder="کلید DeepSeek"><a class="key-link" href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">دریافت کلید ↗</a><label class="forget"><input id="clearDeepseekApiKey" type="checkbox"> پاک‌کردن کلید ذخیره‌شده</label></div>
       <div class="field"><label for="openrouterApiKey">OpenRouter API key</label><input id="openrouterApiKey" type="password" autocomplete="off" placeholder="کلید OpenRouter"><a class="key-link" href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">دریافت کلید ↗</a><label class="forget"><input id="clearOpenrouterApiKey" type="checkbox"> پاک‌کردن کلید ذخیره‌شده</label></div>
@@ -285,7 +285,7 @@ function openLivePreview(code, lang){
   host.replaceChildren();
   const iframe = document.createElement('iframe');
   iframe.className = 'preview-iframe-host';
-  iframe.sandbox = 'allow-scripts allow-modals allow-same-origin';
+  iframe.sandbox = 'allow-scripts allow-modals';
   host.append(iframe);
   dlg.showModal();
   let htmlDoc = code;
@@ -597,7 +597,7 @@ function richBlocks(text){
       if(event.type==='assistant'){appendMessage('assistant',event.text,'SHΞN™');speak(event.text);}
       if(event.type==='error')appendMessage('error',event.text,'خطا');
       if(event.type==='notice')feed.append(el('div','notice',event.text));
-      if(event.type==='command_pending'){pending={id:event.approval_id,command:event.command};appendCommand(event.command,event.approval_id);}
+      if(event.type==='command_pending'){const aid=event.approval_id??event.id;if(!pending||pending.id!==aid){pending={id:aid,command:event.command};appendCommand(event.command,aid);}}
       if(event.type==='command_running'){
         document.querySelector('#activity').textContent=`در حال اجرا: ${event.command||event.tool||''}`;
         ensureLiveTerminal(event.command||event.tool);
@@ -617,7 +617,9 @@ function richBlocks(text){
     }
     function setRunning(value){isRunning=value;sendButton.classList.toggle('busy',value);document.querySelector('#statusDot').classList.toggle('busy',value);document.querySelector('#statusText').textContent=value?'در حال پردازش':'آماده';document.querySelector('#newChat').disabled=value;updateSend();updateApprovalUI();}
     function setIntegration(id,name,ready){const badge=document.querySelector(`#${id}`);badge.textContent=`${name} · ${ready?'متصل':'تنظیم نشده'}`;badge.classList.toggle('ready',ready);}
+    let polling=false;
     async function poll(){
+      if(polling)return;polling=true;
       try{const state=await api(`/api/state?after=${lastEventId}`);state.events.forEach(renderEvent);setRunning(state.running);document.querySelector('#autoApprove').checked=state.autoApprove;
         setIntegration('githubStatus','GitHub',state.githubConfigured);setIntegration('cloudflareStatus','Cloudflare',state.cloudflareConfigured);document.querySelector('#workspaceStatus').textContent=`فضای کاری · ${state.workspace.split('/').pop()}`;
         document.querySelector('#modelChipName').textContent=state.model||'…';
@@ -628,7 +630,7 @@ function richBlocks(text){
         document.querySelector('#statusDot').classList.toggle('busy',!!state.running);
         updateApprovalUI();
         if(!state.providerConfigured&&!settingsDialog.open&&!settingsPrompted){settingsPrompted=true;showSettings();}
-      }catch(_){document.querySelector('#statusText').textContent='اتصال محلی قطع است';document.querySelector('#statusDot').classList.add('busy');}
+      }catch(_){document.querySelector('#statusText').textContent='اتصال محلی قطع است';document.querySelector('#statusDot').classList.add('busy');}finally{polling=false;}
     }
     async function showSettings(){
       try{const config=await api('/api/config');document.querySelector('#model').value=config.model||'gemini-3.8-flash';

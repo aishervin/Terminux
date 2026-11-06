@@ -112,11 +112,12 @@ run_quiet() {
   # run command, capture output; on failure show last lines
   local log
   log="$(mktemp 2>/dev/null || echo /tmp/terminux-install.log)"
-  if "$@" >"$log" 2>&1; then
+  local code=0
+  "$@" >"$log" 2>&1 || code=$?
+  if [[ "$code" -eq 0 ]]; then
     rm -f "$log" 2>/dev/null || true
     return 0
   fi
-  local code=$?
   stop_spinner
   printf "\n  ${E}خروجی خطا:${R}\n"
   tail -n 25 "$log" 2>/dev/null | sed 's/^/    /' >&2 || true
@@ -165,7 +166,7 @@ else
     || fail "کلون مخزن ناموفق بود: $REPO_URL"
 fi
 [[ -f "$INSTALL_DIR/package.json" ]] || fail "package.json در $INSTALL_DIR پیدا نشد."
-[[ -f "$INSTALL_DIR/server.ts" ]] || fail "server.ts پیدا نشد — کلون ناقص است."
+[[ -f "$INSTALL_DIR/src/server.ts" ]] || fail "src/server.ts پیدا نشد — کلون ناقص است."
 step_done 2 "سورس دریافت شد"
 
 # ── 3/5 npm ────────────────────────────────────────────────────────
@@ -173,7 +174,7 @@ start_spinner "۳/۵  نصب وابستگی‌های npm (ممکن است چند
 # prefer full install so tsx stays available; omit optional noise
 if ! run_quiet npm install --prefix "$INSTALL_DIR" --no-audit --no-fund; then
   # retry once clean
-  rm -rf "$INSTALL_DIR/node_modules" "$INSTALL_DIR/package-lock.json"
+  rm -rf "$INSTALL_DIR/node_modules"
   run_quiet npm install --prefix "$INSTALL_DIR" --no-audit --no-fund \
     || fail "npm install ناموفق بود."
 fi
@@ -190,10 +191,14 @@ cat > "$PREFIX_BIN/terminux" <<EOF
 # Terminux launcher
 export TERMINUX_WORKSPACE="${WORKSPACE_DIR}"
 cd "${INSTALL_DIR}" || exit 1
-if [[ -x ./node_modules/.bin/tsx ]]; then
-  exec ./node_modules/.bin/tsx server.ts
-fi
-exec npm start
+# کد خروج ۷۵ = درخواست راه‌اندازی مجدد (ابزار restart_server / self_update)
+while true; do
+  if [[ -x ./node_modules/.bin/tsx ]]; then ./node_modules/.bin/tsx src/server.ts; else npm start; fi
+  code=\$?
+  [[ \$code -eq 75 ]] || exit \$code
+  echo "↻ راه‌اندازی مجدد Terminux…"
+  sleep 1
+done
 EOF
 chmod 700 "$PREFIX_BIN/terminux" || fail "chmod میانبر ناموفق بود."
 command -v terminux >/dev/null 2>&1 || export PATH="$PREFIX_BIN:$PATH"
@@ -220,11 +225,5 @@ printf "  ${D}نشانی وب${R}     ${C}http://127.0.0.1:3000${R}\n\n"
 printf "  ${D}────────────────────────────────────────────────────────${R}\n"
 printf "  ${O}▶${R}  در حال راه‌اندازی سرور…\n\n"
 
-cd "$INSTALL_DIR" || fail "ورود به $INSTALL_DIR ممکن نشد."
-export TERMINUX_WORKSPACE="$WORKSPACE_DIR"
 export PATH="$PREFIX_BIN:$PATH"
-
-if [[ -x ./node_modules/.bin/tsx ]]; then
-  exec ./node_modules/.bin/tsx server.ts
-fi
-exec npm start
+exec "$PREFIX_BIN/terminux"

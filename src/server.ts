@@ -1,16 +1,28 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { exec, execSync, spawn } from 'child_process';
+import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 
-const app = express();
-app.use(cors({ origin: ['http://localhost:3000', 'http://127.0.0.1:3000'] }));
-app.use(express.json({ limit: '10mb' }));
+const PORT = Number(process.env.PORT || 3000);
+const HOST = process.env.TERMINUX_HOST || '127.0.0.1';
 
-const APP_DIR = process.cwd();
+const app = express();
+app.use(cors({ origin: [`http://localhost:${PORT}`, `http://127.0.0.1:${PORT}`] }));
+// جلوگیری از DNS-rebinding: فقط Hostهای محلی (مگر اینکه صراحتاً روی شبکه باز شده باشد)
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const isLocalBind = ['127.0.0.1', 'localhost', '::1'].includes(HOST);
+  if (!isLocalBind) return next();
+  const host = String(req.headers.host || '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '');
+  if (['localhost', '127.0.0.1', '::1'].includes(host)) return next();
+  res.status(403).json({ error: 'Host نامعتبر.' });
+});
+app.use(express.json({ limit: '25mb' }));
+
+const APP_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WEB_DIR = path.join(APP_DIR, 'web');
 const CONFIG_DIR = path.join(os.homedir(), '.config', 'terminux');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
@@ -278,7 +290,8 @@ const TOOL_DECLARATIONS = [
       type: 'OBJECT',
       properties: {
         method: { type: 'STRING', description: 'HTTP method' },
-        path: { type: 'STRING', description: 'Cloudflare API relative path' }
+        path: { type: 'STRING', description: 'Cloudflare API relative path' },
+        body: { type: 'OBJECT', description: 'JSON body' }
       },
       required: ['method', 'path']
     }
@@ -289,7 +302,8 @@ const TOOL_DECLARATIONS = [
     parameters: {
       type: 'OBJECT',
       properties: {
-        query: { type: 'STRING', description: 'GraphQL query text' }
+        query: { type: 'STRING', description: 'GraphQL query text' },
+        variables: { type: 'OBJECT', description: 'GraphQL variables' }
       },
       required: ['query']
     }
@@ -301,7 +315,8 @@ const TOOL_DECLARATIONS = [
       type: 'OBJECT',
       properties: {
         method: { type: 'STRING', description: 'HTTP method' },
-        path: { type: 'STRING', description: 'Relative path' }
+        path: { type: 'STRING', description: 'Relative path' },
+        body: { type: 'OBJECT', description: 'JSON body' }
       },
       required: ['path']
     }
@@ -327,7 +342,8 @@ const TOOL_DECLARATIONS = [
       type: 'OBJECT',
       properties: {
         method: { type: 'STRING', description: 'HTTP method' },
-        path: { type: 'STRING', description: 'Relative path' }
+        path: { type: 'STRING', description: 'Relative path, e.g. /drive/v3/files' },
+        body: { type: 'OBJECT', description: 'JSON body' }
       },
       required: ['path']
     }
@@ -339,7 +355,8 @@ const TOOL_DECLARATIONS = [
       type: 'OBJECT',
       properties: {
         server: { type: 'STRING', description: 'Server name' },
-        tool: { type: 'STRING', description: 'Tool name' }
+        tool: { type: 'STRING', description: 'Tool name (omit to list tools)' },
+        arguments: { type: 'OBJECT', description: 'Tool arguments' }
       },
       required: ['server']
     }
@@ -415,7 +432,7 @@ function saveConfig() {
 
 let history: any[] = [];
 let events: any[] = [];
-let nextEventId = 1;
+let nextEventId = Date.now();
 let isRunning = false;
 let autoApprove = false;
 interface PendingApproval {
@@ -437,7 +454,7 @@ function loadHistoryAndEvents() {
     try {
       events = JSON.parse(fs.readFileSync(EVENTS_FILE, 'utf-8'));
       if (events.length > 0) {
-        nextEventId = Math.max(...events.map((e) => e.id || 0)) + 1;
+        nextEventId = Math.max(nextEventId, ...events.map((e) => e.id || 0) .map((n) => n + 1));
       }
     } catch (_) {}
   }
@@ -447,7 +464,8 @@ loadHistoryAndEvents();
 function saveHistoryAndEvents() {
   try {
     fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(-100), null, 2), 'utf-8');
-    fs.writeFileSync(EVENTS_FILE, JSON.stringify(events.slice(-300), null, 2), 'utf-8');
+    const persisted = events.filter((e) => e.type !== 'command_chunk').slice(-300);
+    fs.writeFileSync(EVENTS_FILE, JSON.stringify(persisted, null, 2), 'utf-8');
   } catch (_) {}
 }
 
@@ -459,8 +477,10 @@ function addEvent(kind: string, fields: Record<string, any> = {}) {
     ...fields
   };
   events.push(event);
-  if (events.length > 300) events.shift();
-  if (!['command_pending', 'command_running', 'status'].includes(kind)) {
+  // خروجی کامل در command_result می‌آید؛ تکه‌های زنده را حذف می‌کنیم تا پیام‌های گفتگو از بافر بیرون نروند.
+  if (kind === 'command_result') events = events.filter((e) => e.type !== 'command_chunk');
+  while (events.length > 600) events.shift();
+  if (!['command_pending', 'command_running', 'command_chunk', 'status'].includes(kind)) {
     saveHistoryAndEvents();
   }
   return event;
@@ -529,8 +549,9 @@ async function requestApproval(label: string, tool: string): Promise<boolean> {
 
 async function executeTool(name: string, args: Record<string, any>): Promise<any> {
   if (name === 'run_shell') {
-    const cmd = args.command;
-    const timeout = (args.timeout_seconds || 300) * 1000;
+    const cmd = String(args.command ?? '').trim();
+    if (!cmd) return { error: 'فرمان خالی است.', exit_code: 2 };
+    const timeout = Math.min(Math.max(Number(args.timeout_seconds) || 300, 1), 3600) * 1000;
     return new Promise((resolve) => {
       let output = '';
       const shellEnv: NodeJS.ProcessEnv = { ...process.env };
@@ -545,11 +566,17 @@ async function executeTool(name: string, args: Record<string, any>): Promise<any
         if (config.deepseek_api_key) shellEnv.DEEPSEEK_API_KEY = config.deepseek_api_key;
         if (config.openrouter_api_key) shellEnv.OPENROUTER_API_KEY = config.openrouter_api_key;
       }
-      const proc = spawn('sh', ['-c', cmd], { cwd: WORKSPACE_DIR, env: shellEnv });
-      
+      const proc = spawn('sh', ['-c', cmd], { cwd: WORKSPACE_DIR, env: shellEnv, detached: true });
+      let timedOut = false;
+      const killGroup = (sig: NodeJS.Signals) => {
+        try { if (proc.pid) process.kill(-proc.pid, sig); } catch (_) { try { proc.kill(sig); } catch (_) {} }
+      };
       const timer = setTimeout(() => {
-        try { proc.kill('SIGTERM'); } catch (_) {}
+        timedOut = true;
+        killGroup('SIGTERM');
+        setTimeout(() => killGroup('SIGKILL'), 3000).unref();
       }, timeout);
+      const tail = (o: string) => (o.length > 32000 ? '…[بریده شد]\n' + o.slice(-32000) : o);
 
       const handleData = (data: Buffer) => {
         const str = data.toString('utf-8');
@@ -560,21 +587,19 @@ async function executeTool(name: string, args: Record<string, any>): Promise<any
       if (proc.stdout) proc.stdout.on('data', handleData);
       if (proc.stderr) proc.stderr.on('data', handleData);
 
-      proc.on('close', (code) => {
+      proc.on('close', (code, signal) => {
         clearTimeout(timer);
+        if (timedOut) output += `\n[زمان فرمان پس از ${timeout / 1000} ثانیه تمام شد و متوقف شد]`;
         resolve({
-          exit_code: code ?? 0,
-          output: output.slice(0, 32000)
+          exit_code: timedOut ? 124 : (code ?? (signal ? 128 : 1)),
+          output: tail(output)
         });
       });
 
       proc.on('error', (err) => {
         clearTimeout(timer);
         output += '\n' + err.message;
-        resolve({
-          exit_code: 1,
-          output: output.slice(0, 32000)
-        });
+        resolve({ exit_code: 1, output: tail(output) });
       });
     });
   }
@@ -684,7 +709,7 @@ async function executeTool(name: string, args: Record<string, any>): Promise<any
       const skipNames = new Set(['node_modules', '.git', 'dist', '.terminux-uploads']);
       function walk(dir: string, rel: string) {
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-          if (skipNames.has(entry.name) || entry.name.startsWith('.')) continue;
+          if (skipNames.has(entry.name) || /^\.env(\.|$)/.test(entry.name) || entry.name === '.DS_Store') continue;
           const full = path.join(dir, entry.name);
           const r = rel ? rel + '/' + entry.name : entry.name;
           if (entry.isDirectory()) walk(full, r);
@@ -729,6 +754,7 @@ async function executeTool(name: string, args: Record<string, any>): Promise<any
       if (!baseTree) return { error: 'tree پایه پیدا نشد.' };
 
       const treeItems: any[] = [];
+      const skippedCount = Math.max(0, files.length - 200);
       for (const f of files.slice(0, 200)) {
         const blobRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/blobs`, {
           method: 'POST', headers, body: JSON.stringify({ content: f.content, encoding: 'utf-8' })
@@ -772,7 +798,8 @@ async function executeTool(name: string, args: Record<string, any>): Promise<any
         ok: true,
         owner, repo, branch,
         commit: newCommit.sha,
-        files: files.length,
+        files: Math.min(files.length, 200),
+        ...(skippedCount ? { warning: `${skippedCount} فایل به‌خاطر سقف ۲۰۰ فایل منتشر نشد.` } : {}),
         url: `https://github.com/${owner}/${repo}/commit/${newCommit.sha}`
       };
     } catch (e: any) {
@@ -942,14 +969,37 @@ async function executeTool(name: string, args: Record<string, any>): Promise<any
   }
 
   if (name === 'restart_server') {
-    setTimeout(() => process.exit(0), 1000);
+    setTimeout(() => process.exit(75), 1000); // کد ۷۵ = درخواست راه‌اندازی مجدد توسط launcher
     return { ok: true, note: 'سرور تا چند ثانیه دیگر دوباره بالا می‌آید.' };
   }
 
   return { error: `ابزار «${name}» شناخته نشد؛ هیچ عملیاتی انجام نشد.` };
 }
 
-async function callModelWithTools(historyList: any[]): Promise<{ text?: string; functionCalls?: any[] }> {
+// تبدیل پیوست‌های ذخیره‌شده در تاریخچه به قطعه‌های معتبر API (فیلد ناشناختهٔ terminuxAttachment باعث خطای ۴۰۰ می‌شد)
+function partsToApi(parts: any[]): any[] {
+  const out: any[] = [];
+  for (const p of parts) {
+    if (!p?.terminuxAttachment) { out.push(p); continue; }
+    const a = p.terminuxAttachment;
+    try {
+      const buf = fs.readFileSync(getWorkspacePath(String(a.path || '')));
+      const mime = String(a.mimeType || '');
+      if (/^(image\/(png|jpe?g|webp|gif|heic|heif)|application\/pdf)$/i.test(mime) && buf.length <= 15 * 1024 * 1024) {
+        out.push({ inlineData: { mimeType: mime, data: buf.toString('base64') } });
+      } else if (buf.length < 300000 && !buf.includes(0)) {
+        out.push({ text: `[فایل پیوست: ${a.name} — ${a.path}]\n${buf.toString('utf-8')}` });
+      } else {
+        out.push({ text: `[فایل پیوست: ${a.name} در مسیر ${a.path} (${buf.length} بایت)؛ برای خواندن از ابزارها استفاده کن]` });
+      }
+    } catch (_) {
+      out.push({ text: `[پیوست «${a?.name || ''}» دیگر در دسترس نیست]` });
+    }
+  }
+  return out;
+}
+
+async function callModelWithTools(historyList: any[]): Promise<{ text?: string; functionCalls?: any[]; rawParts?: any[] }> {
   const prov = config.provider || 'gemini';
   // Standalone first: use saved key. Fallback to env only if no saved key exists.
   const apiKey = config.api_key || process.env.GEMINI_API_KEY || '';
@@ -962,7 +1012,7 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
     const oauthContents: any[] = historyList.map((h) => ({
       role: h.role === 'assistant' || h.role === 'model' ? 'model' : 'user',
       parts: Array.isArray(h.parts)
-        ? h.parts
+        ? partsToApi(h.parts)
         : typeof h.content === 'string'
         ? [{ text: h.content }]
         : [{ text: JSON.stringify(h) }]
@@ -983,8 +1033,8 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
             project: '',
             request: {
               contents: oauthContents,
-              systemInstruction: SYSTEM_PROMPT,
-              temperature: 0.2,
+              systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+              generationConfig: { temperature: 0.2 },
               tools: [{ functionDeclarations: TOOL_DECLARATIONS as any }]
             }
           })
@@ -996,11 +1046,13 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
           throw lastErr;
         }
         const data: any = await res.json();
-        const parts = data?.candidates?.[0]?.content?.parts || [];
+        const payload = data?.response || data;
+        const parts = payload?.candidates?.[0]?.content?.parts || [];
         geminiOauthTokenIndex = geminiOauthTokenIndex + i + 1;
         return {
-          text: parts.map((p: any) => p?.text || '').join(''),
-          functionCalls: parts.map((p: any) => p?.functionCall).filter(Boolean)
+          text: parts.filter((p: any) => !p?.thought).map((p: any) => p?.text || '').join(''),
+          functionCalls: parts.map((p: any) => p?.functionCall).filter(Boolean),
+          rawParts: parts
         };
       } catch (err: any) {
         lastErr = err;
@@ -1032,7 +1084,7 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
     const contents: any[] = historyList.map((h) => ({
       role: h.role === 'assistant' || h.role === 'model' ? 'model' : 'user',
       parts: Array.isArray(h.parts)
-        ? h.parts
+        ? partsToApi(h.parts)
         : typeof h.content === 'string'
         ? [{ text: h.content }]
         : [{ text: JSON.stringify(h) }]
@@ -1051,7 +1103,8 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
 
       return {
         text: response.text,
-        functionCalls: response.functionCalls
+        functionCalls: response.functionCalls,
+        rawParts: response.candidates?.[0]?.content?.parts
       };
     } catch (err: any) {
       const msg = err?.message || String(err);
@@ -1089,7 +1142,7 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
         }};
       });
       const responses = parts.filter((p: any) => p?.functionResponse);
-      const content = parts.filter((p: any) => typeof p?.text === 'string').map((p: any) => p.text).join('\n');
+      const content = partsToApi(parts).filter((p: any) => typeof p?.text === 'string' && !p.thought).map((p: any) => p.text).join('\n');
       if (role === 'assistant') {
         if (calls.length) messages.push({ role: 'assistant', content: content || null, tool_calls: calls });
         else if (content || item.content) messages.push({ role: 'assistant', content: content || item.content });
@@ -1107,9 +1160,9 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
       for (const [key, value] of Object.entries(schema)) out[key] = key === 'type' && typeof value === 'string' ? value.toLowerCase() : normalizeSchema(value);
       return out;
     };
-    const openAiTools = prov === 'pollinations' ? [] : TOOL_DECLARATIONS.filter((tool: any) => tool.parameters).map((tool: any) => ({
+    const openAiTools = prov === 'pollinations' ? [] : TOOL_DECLARATIONS.map((tool: any) => ({
       type: 'function',
-      function: { name: tool.name, description: tool.description, parameters: normalizeSchema(tool.parameters) }
+      function: { name: tool.name, description: tool.description, parameters: tool.parameters ? normalizeSchema(tool.parameters) : { type: 'object', properties: {} } }
     }));
 
     if (prov === 'openrouter' && !key) {
@@ -1186,8 +1239,9 @@ async function runAgent(userMsg: string, attachments: any[]) {
     }
     history.push({ role: 'user', parts: userParts, content: userMsg });
 
+    let finished = false;
     for (let step = 0; step < 30; step++) {
-      const { text, functionCalls } = await callModelWithTools(history);
+      const { text, functionCalls, rawParts } = await callModelWithTools(history);
 
       if (text) {
         addEvent('assistant', { text });
@@ -1196,20 +1250,25 @@ async function runAgent(userMsg: string, attachments: any[]) {
       if (!functionCalls || functionCalls.length === 0) {
         if (text) {
           history.push({ role: 'model', parts: [{ text }], content: text });
+        } else {
+          addEvent('notice', { text: 'مدل پاسخ خالی برگرداند؛ دوباره امتحان کن یا مدل دیگری انتخاب کن.' });
         }
+        finished = true;
         break;
       }
 
-      const modelParts: any[] = [];
+      // پاسخ خام مدل (با thoughtSignature) برای مدل‌های Gemini 3 باید عیناً به تاریخچه برگردد
+      const usingRaw = Array.isArray(rawParts) && rawParts.some((p: any) => p?.functionCall);
+      const modelParts: any[] = usingRaw ? rawParts!.filter((p: any) => !p?.thought) : [];
       const responseParts: any[] = [];
-      if (text) modelParts.push({ text });
+      if (!usingRaw && text) modelParts.push({ text });
 
       for (const call of functionCalls) {
         const name = call.name;
         const args = call.args || {};
         const label = toolLabel(name, args);
 
-        modelParts.push({ functionCall: { name, args } });
+        if (!usingRaw) modelParts.push({ functionCall: { name, args } });
 
         let approved = true;
         if (toolNeedsApproval(name, args)) {
@@ -1237,6 +1296,7 @@ async function runAgent(userMsg: string, attachments: any[]) {
       history.push({ role: 'model', parts: modelParts });
       history.push({ role: 'user', parts: responseParts });
     }
+    if (!finished) addEvent('notice', { text: 'حداکثر ۳۰ گام ابزار اجرا شد و ایجنت متوقف شد. برای ادامه «ادامه بده» بفرست.' });
   } catch (err: any) {
     addEvent('error', { text: err.message || 'خطا در اجرای ایجنت.' });
   } finally {
@@ -1311,6 +1371,15 @@ app.get('/api/models', async (req: Request, res: Response) => {
   });
 });
 
+const REDACTED = '***';
+function redactedMcp(): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const [name, srv] of Object.entries(config.mcp_servers || {})) {
+    out[name] = srv && typeof srv === 'object' && (srv as any).token ? { ...(srv as any), token: REDACTED } : srv;
+  }
+  return out;
+}
+
 app.get('/api/config', (req: Request, res: Response) => {
   res.json({
     configured: isProviderConfigured('gemini'),
@@ -1327,7 +1396,9 @@ app.get('/api/config', (req: Request, res: Response) => {
     hfConfigured: Boolean(config.hf_token),
     gmailConfigured: Boolean(config.gmail_address && config.gmail_app_password),
     driveConfigured: Boolean(config.drive_refresh_token),
-    mcpServers: config.mcp_servers || {}
+    geminiOauthConfigured: geminiOauthTokens().length > 0,
+    geminiOauthTokenCount: geminiOauthTokens().length,
+    mcpServers: redactedMcp()
   });
 });
 
@@ -1367,8 +1438,9 @@ app.get('/api/file', (req: Request, res: Response) => {
 });
 
 app.post('/api/upload', (req: Request, res: Response) => {
-  const { name, mimeType, data } = req.body;
-  if (!name || !mimeType || !data) {
+  const { name, data } = req.body || {};
+  const mimeType = String(req.body?.mimeType || 'application/octet-stream');
+  if (typeof name !== 'string' || !name || typeof data !== 'string' || !data) {
     return res.status(400).json({ error: 'اطلاعات فایل ناقص است.' });
   }
   try {
@@ -1395,14 +1467,20 @@ app.post('/api/upload', (req: Request, res: Response) => {
 });
 
 app.post('/api/chat', (req: Request, res: Response) => {
-  const { message, attachments } = req.body;
+  const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+  const attachments = (Array.isArray(req.body?.attachments) ? req.body.attachments : [])
+    .filter((a: any) => a && typeof a.path === 'string' && a.path.startsWith('.terminux-uploads/'))
+    .slice(0, 5);
+  if (!message && !attachments.length) {
+    return res.status(400).json({ error: 'پیام یا پیوستی ارسال نشده است.' });
+  }
   if (isRunning) {
     return res.status(409).json({ error: 'یک درخواست دیگر هنوز در حال اجراست.' });
   }
-  addEvent('user', { text: message, attachments: attachments || [] });
+  addEvent('user', { text: message, attachments });
   addEvent('status', { running: true });
 
-  runAgent(message || '', attachments || []);
+  runAgent(message, attachments);
   res.status(202).json({ ok: true });
 });
 
@@ -1428,10 +1506,25 @@ app.post('/api/config', (req: Request, res: Response) => {
     passTokensToShell
   } = req.body;
 
-  if (apiKey !== undefined) config.api_key = apiKey;
-  if (mistralApiKey !== undefined) config.mistral_api_key = mistralApiKey;
-  if (deepseekApiKey !== undefined) config.deepseek_api_key = deepseekApiKey;
-  if (openrouterApiKey !== undefined) config.openrouter_api_key = openrouterApiKey;
+  // فیلد خالی یعنی «بدون تغییر»؛ پاک‌کردن فقط با تیک «فراموش کن» (قبلاً هر ذخیره کلیدها را خالی می‌کرد)
+  const setText = (field: keyof Config, value: unknown, clear?: unknown) => {
+    if (clear) { (config as any)[field] = ''; return; }
+    if (typeof value === 'string' && value.trim()) (config as any)[field] = value.trim();
+  };
+  const b = req.body || {};
+  setText('api_key', apiKey, b.clearApiKey);
+  setText('mistral_api_key', mistralApiKey, b.clearMistralApiKey);
+  setText('deepseek_api_key', deepseekApiKey, b.clearDeepseekApiKey);
+  setText('openrouter_api_key', openrouterApiKey, b.clearOpenrouterApiKey);
+  setText('github_token', githubToken, b.clearGithubToken);
+  setText('cloudflare_token', cloudflareToken, b.clearCloudflareToken);
+  setText('linear_api_key', linearApiKey, b.clearLinearApiKey);
+  setText('hf_token', hfToken, b.clearHfToken);
+  setText('gmail_address', gmailAddress, b.clearGmail);
+  setText('gmail_app_password', gmailAppPassword, b.clearGmail);
+  setText('drive_client_id', driveClientId, b.clearDrive);
+  setText('drive_client_secret', driveClientSecret, b.clearDrive);
+  setText('drive_refresh_token', driveRefreshToken, b.clearDrive);
   if (clearGeminiOauthTokens) {
     config.gemini_oauth_tokens = [];
   } else if (typeof geminiOauthTokens === 'string' && geminiOauthTokens.trim()) {
@@ -1439,17 +1532,17 @@ app.post('/api/config', (req: Request, res: Response) => {
   } else if (Array.isArray(geminiOauthTokens) && geminiOauthTokens.length) {
     config.gemini_oauth_tokens = geminiOauthTokens.map((t: any) => String(t).trim()).filter(Boolean);
   }
-  if (githubToken !== undefined) config.github_token = githubToken;
-  if (cloudflareToken !== undefined) config.cloudflare_token = cloudflareToken;
-  if (linearApiKey !== undefined) config.linear_api_key = linearApiKey;
-  if (hfToken !== undefined) config.hf_token = hfToken;
-  if (gmailAddress !== undefined) config.gmail_address = gmailAddress;
-  if (gmailAppPassword !== undefined) config.gmail_app_password = gmailAppPassword;
-  if (driveClientId !== undefined) config.drive_client_id = driveClientId;
-  if (driveClientSecret !== undefined) config.drive_client_secret = driveClientSecret;
-  if (driveRefreshToken !== undefined) config.drive_refresh_token = driveRefreshToken;
-  if (provider) config.provider = provider;
-  if (model) config.model = model;
+  if (b.mcpServers && typeof b.mcpServers === 'object' && !Array.isArray(b.mcpServers)) {
+    const next: Record<string, any> = {};
+    for (const [name, srv] of Object.entries<any>(b.mcpServers)) {
+      if (!srv || typeof srv !== 'object') continue;
+      const old: any = (config.mcp_servers || {})[name];
+      next[name] = { ...srv, ...(srv.token === REDACTED && old?.token ? { token: old.token } : {}) };
+    }
+    config.mcp_servers = next;
+  }
+  if (typeof provider === 'string' && PROVIDERS[provider]) config.provider = provider;
+  if (typeof model === 'string' && model.trim()) config.model = model.trim();
   if (passTokensToShell !== undefined) config.pass_tokens_to_shell = Boolean(passTokensToShell);
 
   saveConfig();
@@ -1490,7 +1583,6 @@ app.post('/api/clear', (req: Request, res: Response) => {
   }
   history = [];
   events = [];
-  nextEventId = 1;
   saveHistoryAndEvents();
   res.json({ ok: true });
 });
@@ -1577,7 +1669,9 @@ app.get('/api/github/repos', async (req: Request, res: Response) => {
       default_branch: r.default_branch,
       updated_at: r.updated_at
     }));
-    res.json({ user: user ? { login: user.login, name: user.name, html_url: user.html_url } : null, repos: formatted });
+    const filter = String(req.query.filter || 'all');
+    const shown = filter === 'public' ? formatted.filter((r: any) => !r.private) : filter === 'private' ? formatted.filter((r: any) => r.private) : formatted;
+    res.json({ user: user ? { login: user.login, name: user.name, html_url: user.html_url } : null, repos: shown });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1622,9 +1716,6 @@ app.get('/api/github/repo-tree', async (req: Request, res: Response) => {
 app.get('/healthz', (req: Request, res: Response) => {
   res.json({ ok: true });
 });
-
-const PORT = Number(process.env.PORT || 3000);
-const HOST = process.env.TERMINUX_HOST || '127.0.0.1';
 
 app.listen(PORT, HOST, () => {
   const localUrl = `http://localhost:${PORT}`;
