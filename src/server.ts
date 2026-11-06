@@ -320,6 +320,7 @@ async function runAgent(userText: string, attachments: { name: string; path: str
   pushHistory({ role: "user", text: userText + note });
   try {
     for (let step = 0; step < 6 && !abort.signal.aborted; step++) {
+      pushEvent({ type: "thinking", step: step + 1, text: step === 0 ? "در حال تحلیل درخواست…" : "در حال بررسی نتیجه و ادامه…" });
       const reply = await callModel(history.slice(-historyLimit()), abort.signal);
       if (!reply) { pushEvent({ type: "error", text: "مدل پاسخ خالی داد." }); break; }
       const { text, command } = extractCommand(reply);
@@ -328,6 +329,7 @@ async function runAgent(userText: string, attachments: { name: string; path: str
         pushEvent({ type: "assistant", text });
       }
       if (!command) break;
+      if (autoApprove) pushEvent({ type: "tool_call", tool: "shell", command, cwd: WORKSPACE });
       const decision = await requestApproval(command);
       if (!decision.approved) {
         pushEvent({ type: "notice", text: `فرمان اجرا نشد: ${decision.reason || "رد شد"}` });
@@ -337,7 +339,7 @@ async function runAgent(userText: string, attachments: { name: string; path: str
       pending = null;
       pushEvent({ type: "command_running", command });
       const result = await runShell(command);
-      pushEvent({ type: "command_result", command, exitCode: result.exitCode, output: result.output.slice(-8000) });
+      pushEvent({ type: "tool_result", tool: "shell", command, exitCode: result.exitCode, output: result.output.slice(-8000) });
       if (abort.signal.aborted) break;
       pushHistory({ role: "user", text: `Command: ${command}\nExit code: ${result.exitCode}\nOutput:\n${result.output.slice(-8000)}\n\nContinue.` });
     }
