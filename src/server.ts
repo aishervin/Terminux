@@ -226,10 +226,12 @@ function systemPrompt(): string {
   return [
     "You are Terminux, a terminal agent running on the user's machine (usually Termux on Android).",
     `Workspace: ${WORKSPACE}. Platform: ${process.platform} ${process.arch}.`,
-    "To run a command, output EXACTLY one fenced block tagged run:",
+    "To run a shell command you MUST call the run_shell tool. Do not describe the command instead of calling it.",
+    "If tool calling is unavailable, output EXACTLY one fenced block tagged run, like:",
     "```run",
     "ls -la",
     "```",
+    "Never answer only with phrases like 'you can use the following command'; either call run_shell or ask a clarifying question.",
     "Only run commands that are safe and relevant. Never fabricate command output or success.",
     "Answer in the user's language (Persian by default). Keep answers short and practical.",
   ].join("\n");
@@ -237,11 +239,46 @@ function systemPrompt(): string {
 
 // ── provider request ──
 interface ToolResult { exitCode: number; output: string }
+interface ModelReply { text: string; command: string | null }
 
-async function callGemini(messages: { role: "user" | "model"; text: string }[], token: string, signal: AbortSignal): Promise<string> {
+const RUN_SHELL_TOOL = {
+  type: "function",
+  function: {
+    name: "run_shell",
+    description: "Run a shell command on the user's machine. The app shows an approval prompt before execution.",
+    parameters: {
+      type: "object",
+      properties: {
+        command: { type: "string", description: "Exact shell command to execute in the workspace." },
+        reason: { type: "string", description: "One short sentence explaining why." },
+      },
+      required: ["command"],
+    },
+  },
+};
+
+const GEMINI_RUN_TOOL = {
+  functionDeclarations: [
+    {
+      name: "run_shell",
+      description: "Run a shell command on the user's machine. The app shows an approval prompt before execution.",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          command: { type: "STRING", description: "Exact shell command to execute in the workspace." },
+          reason: { type: "STRING", description: "One short sentence explaining why." },
+        },
+        required: ["command"],
+      },
+    },
+  ],
+};
+
+async function callGemini(messages: { role: "user" | "model"; text: string }[], token: string, signal: AbortSignal): Promise<ModelReply> {
   const body = {
     systemInstruction: { parts: [{ text: systemPrompt() }] },
     contents: messages.map((m) => ({ role: m.role, parts: [{ text: m.text }] })),
+    tools: [GEMINI_RUN_TOOL],
     generationConfig: { temperature: 0.4, maxOutputTokens: 4096 },
   };
   const doFetch = async (bearer: string) => fetch(
@@ -257,11 +294,33 @@ async function callGemini(messages: { role: "user" | "model"; text: string }[], 
     if (retry.ok) response = retry;
   }
   if (!response.ok) throw new Error(`Gemini ${response.status}: ${(await response.text()).slice(0, 400)}`);
-  const data = await response.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-  return (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("").trim();
+  const data = await response.json() as { candidates?: { content?: { parts?: { text?: string; functionCall?: { name?: string; args?: unknown } }[] } }[] };
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  let text = "";
+  let command: string | null = null;
+  for (const part of parts) {
+    if (part.text) text += part.text;
+    if (part.functionCall?.name === "run_shell") {
+      const args = part.functionCall.args;
+      const parsed = typeof args === "string" ? safeJson(args) : args;
+      const value = parsed && typeof parsed === "object" ? (parsed as { command?: unknown }).command : undefined;
+      if (typeof value === "string" && value.trim()) command = value.trim();
+    }
+  }
+  text = text.trim();
+  if (!command && text) {
+    const extracted = extractCommand(text);
+    text = extracted.text;
+    command = extracted.command;
+  }
+  return { text, command };
 }
 
-async function callOpenAICompatible(messages: { role: "user" | "model"; text: string }[], token: string, signal: AbortSignal): Promise<string> {
+function safeJson(value: string): unknown {
+  try { return JSON.parse(value); } catch { return null; }
+}
+
+async function callOpenAICompatible(messages: { role: "user" | "model"; text: string }[], token: string, signal: AbortSignal): Promise<ModelReply> {
   const endpoints: Record<string, string> = {
     mistral: "https://api.mistral.ai/v1/chat/completions",
     deepseek: "https://api.deepseek.com/chat/completions",
@@ -275,28 +334,103 @@ async function callOpenAICompatible(messages: { role: "user" | "model"; text: st
     body: JSON.stringify({
       model: config.model,
       messages: [{ role: "system", content: systemPrompt() }, ...messages.map((m) => ({ role: m.role === "model" ? "assistant" : "user", content: m.text }))],
+      tools: [RUN_SHELL_TOOL],
+      tool_choice: "auto",
       temperature: 0.4,
       max_tokens: 4096,
     }),
   });
   if (!response.ok) throw new Error(`${config.provider} ${response.status}: ${(await response.text()).slice(0, 400)}`);
-  const data = await response.json() as { choices?: { message?: { content?: string } }[] };
-  return (data.choices?.[0]?.message?.content || "").trim();
+  const data = await response.json() as {
+    choices?: {
+      message?: {
+        content?: string | null;
+        tool_calls?: { id?: string; function?: { name?: string; arguments?: string } }[];
+      };
+    }[];
+  };
+  const message = data.choices?.[0]?.message;
+  let text = (message?.content || "").trim();
+  let command: string | null = null;
+  for (const call of message?.tool_calls || []) {
+    if (call.function?.name !== "run_shell") continue;
+    const args = call.function.arguments ? safeJson(call.function.arguments) : null;
+    const value = args && typeof args === "object" ? (args as { command?: unknown }).command : undefined;
+    if (typeof value === "string" && value.trim()) { command = value.trim(); break; }
+  }
+  if (!command && text) {
+    const extracted = extractCommand(text);
+    text = extracted.text;
+    command = extracted.command;
+  }
+  return { text, command };
 }
 
-async function callModel(messages: { role: "user" | "model"; text: string }[], signal: AbortSignal): Promise<string> {
+async function callModel(messages: { role: "user" | "model"; text: string }[], signal: AbortSignal): Promise<ModelReply> {
   const token = providerKey();
   if (!token) throw new Error("هیچ کلید API تنظیم نشده است. در تنظیمات کلید را وارد کنید.");
   return config.provider === "gemini" ? callGemini(messages, token, signal) : callOpenAICompatible(messages, token, signal);
 }
 
 // ── command extraction ──
+const RUN_LANGS = new Set(["run", "bash", "sh", "shell", "zsh", "console", "cmd", "powershell", "ps1", "terminal", "shellscript"]);
+const CODE_LANGS = new Set([
+  "html", "htm", "css", "scss", "js", "javascript", "jsx", "ts", "typescript", "tsx", "python", "py",
+  "json", "yaml", "yml", "toml", "xml", "svg", "md", "markdown", "sql", "diff", "ini", "env", "dockerfile", "docker",
+]);
+const KNOWN_COMMANDS = new Set([
+  "ls", "cd", "pwd", "cat", "echo", "mkdir", "rm", "rmdir", "cp", "mv", "grep", "find", "chmod", "chown",
+  "git", "npm", "npx", "node", "python", "python3", "pip", "pip3", "curl", "wget", "apt", "pkg", "termux-open",
+  "termux-open-url", "termux-toast", "sed", "awk", "tar", "zip", "unzip", "whoami", "uname", "df", "du", "ps",
+  "kill", "pkill", "top", "head", "tail", "wc", "sort", "uniq", "touch", "ln", "bash", "sh", "sudo", "gh",
+  "wrangler", "env", "export", "source", "which", "whereis", "tree", "jq", "tee", "xargs", "printf", "sleep",
+]);
+
+function cleanCommandBody(body: string): string {
+  return body
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*[$>]\s?/, ""))
+    .join("\n")
+    .trim();
+}
+
+function looksLikeShell(body: string): boolean {
+  const lines = body.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (!lines.length || lines.length > 40) return false;
+  return lines.every((line) => {
+    if (/^[<(]/.test(line) || /^[{}]/.test(line)) return false;
+    const first = line.replace(/^[$>]\s*/, "").split(/\s+/)[0] || "";
+    return first.startsWith("./") || first.startsWith("/") || first.startsWith("~") || KNOWN_COMMANDS.has(first.replace(/;+$/, ""));
+  });
+}
+
 function extractCommand(reply: string): { text: string; command: string | null } {
-  const match = reply.match(/```run\r?\n([\s\S]*?)```/);
-  if (!match) return { text: reply.trim(), command: null };
-  const command = match[1].trim();
-  const text = reply.replace(match[0], "").trim();
-  return { text, command: command || null };
+  const fenceRe = /```([A-Za-z0-9_+.-]*)[ \t]*\r?\n([\s\S]*?)```/g;
+  let match: RegExpExecArray | null;
+  let chosen: { index: number; length: number; command: string } | null = null;
+  while ((match = fenceRe.exec(reply))) {
+    const lang = (match[1] || "").toLowerCase();
+    if (CODE_LANGS.has(lang)) continue;
+    const body = cleanCommandBody(match[2]);
+    if (!body) continue;
+    const accepted = RUN_LANGS.has(lang) || (!lang && looksLikeShell(body));
+    if (!accepted) continue;
+    chosen = { index: match.index, length: match[0].length, command: body };
+    break;
+  }
+  if (chosen) {
+    const text = (reply.slice(0, chosen.index) + reply.slice(chosen.index + chosen.length)).trim();
+    return { text, command: chosen.command };
+  }
+  const prefixed = reply.match(/^\s*(?:run|command|shell|اجرا|دستور)\s*[:：]\s*(.+)$/im);
+  if (prefixed) {
+    const command = prefixed[1].trim().replace(/^`|`$/g, "");
+    if (command) {
+      const text = reply.replace(prefixed[0], "").trim();
+      return { text, command };
+    }
+  }
+  return { text: reply.trim(), command: null };
 }
 
 function requestApproval(command: string): Promise<{ approved: boolean; reason?: string }> {
@@ -322,8 +456,9 @@ async function runAgent(userText: string, attachments: { name: string; path: str
     for (let step = 0; step < 6 && !abort.signal.aborted; step++) {
       pushEvent({ type: "thinking", step: step + 1, text: step === 0 ? "در حال تحلیل درخواست…" : "در حال بررسی نتیجه و ادامه…" });
       const reply = await callModel(history.slice(-historyLimit()), abort.signal);
-      if (!reply) { pushEvent({ type: "error", text: "مدل پاسخ خالی داد." }); break; }
-      const { text, command } = extractCommand(reply);
+      const text = reply.text;
+      const command = reply.command;
+      if (!text && !command) { pushEvent({ type: "error", text: "مدل پاسخ خالی داد." }); break; }
       if (text) {
         pushHistory({ role: "model", text });
         pushEvent({ type: "assistant", text });
