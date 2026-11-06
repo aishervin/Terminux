@@ -32,6 +32,16 @@ const WORKSPACE_DIR = process.env.TERMINUX_WORKSPACE
   ? path.resolve(process.env.TERMINUX_WORKSPACE)
   : path.resolve(APP_DIR, 'workspace');
 
+// Global state for process management
+let currentProcess: any = null;
+let currentProcessTimer: NodeJS.Timeout | null = null;
+let currentProcessResolve: ((value: any) => void) | null = null;
+
+// [38;5;208m[0m [97m[0m [90mGlobal state for process management[0m
+let currentProcess: any = null;
+let currentProcessTimer: NodeJS.Timeout | null = null;
+let currentProcessResolve: ((value: any) => void) | null = null;
+
 if (!fs.existsSync(WORKSPACE_DIR)) {
   fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
 }
@@ -567,6 +577,12 @@ async function executeTool(name: string, args: Record<string, any>): Promise<any
         if (config.openrouter_api_key) shellEnv.OPENROUTER_API_KEY = config.openrouter_api_key;
       }
       const proc = spawn('sh', ['-c', cmd], { cwd: WORKSPACE_DIR, env: shellEnv, detached: true });
+      
+      // Store current process for stop functionality
+      currentProcess = proc;
+      currentProcessResolve = resolve;
+      
+      
       let timedOut = false;
       const killGroup = (sig: NodeJS.Signals) => {
         try { if (proc.pid) process.kill(-proc.pid, sig); } catch (_) { try { proc.kill(sig); } catch (_) {} }
@@ -588,6 +604,16 @@ async function executeTool(name: string, args: Record<string, any>): Promise<any
       if (proc.stderr) proc.stderr.on('data', handleData);
 
       proc.on('close', (code, signal) => {
+                // Clear current process on completion
+        if (currentProcess === proc) {
+          currentProcess = null;
+          currentProcessResolve = null;
+          if (currentProcessTimer) {
+            clearTimeout(currentProcessTimer);
+            currentProcessTimer = null;
+          }
+        }
+        
         clearTimeout(timer);
         if (timedOut) output += `\n[زمان فرمان پس از ${timeout / 1000} ثانیه تمام شد و متوقف شد]`;
         resolve({
@@ -597,6 +623,16 @@ async function executeTool(name: string, args: Record<string, any>): Promise<any
       });
 
       proc.on('error', (err) => {
+                // Clear current process on error
+        if (currentProcess === proc) {
+          currentProcess = null;
+          currentProcessResolve = null;
+          if (currentProcessTimer) {
+            clearTimeout(currentProcessTimer);
+            currentProcessTimer = null;
+          }
+        }
+        
         clearTimeout(timer);
         output += '\n' + err.message;
         resolve({ exit_code: 1, output: tail(output) });
@@ -1574,6 +1610,31 @@ app.post('/api/auto-approve', (req: Request, res: Response) => {
   const { enabled } = req.body;
   autoApprove = Boolean(enabled);
   addEvent('notice', { text: autoApprove ? 'اجرای خودکار روشن شد.' : 'تأیید دستی فرمان‌ها روشن شد.' });
+
+
+// Stop current running process
+app.post('/api/stop', (req: Request, res: Response) => {
+  if (currentProcess) {
+    try {
+      if (currentProcess.pid) process.kill(-currentProcess.pid, 'SIGTERM');
+      setTimeout(() => {
+        if (currentProcess.pid) try { process.kill(-currentProcess.pid, 'SIGKILL'); } catch (_) {}
+      }, 1000).unref();
+      if (currentProcessTimer) {
+        clearTimeout(currentProcessTimer);
+        currentProcessTimer = null;
+      }
+      addEvent('command_result', { command: 'Process stopped', output: 'Process was stopped by user', exit_code: 137, tool: 'stop' });
+      currentProcess = null;
+      currentProcessResolve = null;
+      res.json({ ok: true, message: 'Process stopped' });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to stop process' });
+    }
+  } else {
+    res.status(400).json({ error: 'No process running' });
+  }
+});
   res.json({ ok: true, enabled: autoApprove });
 });
 

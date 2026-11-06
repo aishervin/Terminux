@@ -563,6 +563,15 @@ function richBlocks(text){
         title.append(el('span','live-term-dot'),el('span','',`در حال اجرا: ${command||'Termux'}`));
         const timerSpan=el('span','log-meta','00:00');
         head.append(title,timerSpan);
+        const stopBtn = el('button', 'action reject', 'توقف');
+        stopBtn.onclick = async () => {
+          try {
+            await api('/api/stop', {});
+          } catch (err) {
+            console.error('Failed to stop:', err);
+          }
+        };
+        head.append(stopBtn);
         liveTermCard.append(head);
         liveTermText=el('pre','live-term-text');
         liveTermText.dir='ltr';
