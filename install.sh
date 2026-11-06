@@ -165,7 +165,7 @@ else
     || fail "کلون مخزن ناموفق بود: $REPO_URL"
 fi
 [[ -f "$INSTALL_DIR/package.json" ]] || fail "package.json در $INSTALL_DIR پیدا نشد."
-[[ -f "$INSTALL_DIR/server.ts" ]] || fail "server.ts پیدا نشد — کلون ناقص است."
+[[ -f "$INSTALL_DIR/src/server.ts" ]] || fail "src/server.ts پیدا نشد — کلون ناقص است."
 step_done 2 "سورس دریافت شد"
 
 # ── 3/5 npm ────────────────────────────────────────────────────────
@@ -191,7 +191,7 @@ cat > "$PREFIX_BIN/terminux" <<EOF
 export TERMINUX_WORKSPACE="${WORKSPACE_DIR}"
 cd "${INSTALL_DIR}" || exit 1
 if [[ -x ./node_modules/.bin/tsx ]]; then
-  exec ./node_modules/.bin/tsx server.ts
+  exec ./node_modules/.bin/tsx src/server.ts
 fi
 exec npm start
 EOF
@@ -225,6 +225,6 @@ export TERMINUX_WORKSPACE="$WORKSPACE_DIR"
 export PATH="$PREFIX_BIN:$PATH"
 
 if [[ -x ./node_modules/.bin/tsx ]]; then
-  exec ./node_modules/.bin/tsx server.ts
+  exec ./node_modules/.bin/tsx src/server.ts
 fi
 exec npm start

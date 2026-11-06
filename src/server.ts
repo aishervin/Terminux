@@ -3,7 +3,6 @@ import cors from "cors";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -119,6 +118,7 @@ let autoApprove = false;
 let pending: PendingApproval | null = null;
 let currentAbort: AbortController | null = null;
 let currentChild: ChildProcess | null = null;
+let nextApprovalId = 1;
 
 const history: { role: "user" | "model"; text: string }[] = [];
 
@@ -216,6 +216,11 @@ function historyLimit(): number {
   return 30;
 }
 
+function pushHistory(entry: { role: "user" | "model"; text: string }): void {
+  history.push(entry);
+  if (history.length > 200) history.splice(0, history.length - 100);
+}
+
 // ── system prompt ──
 function systemPrompt(): string {
   return [
@@ -240,14 +245,14 @@ async function callGemini(messages: { role: "user" | "model"; text: string }[], 
     generationConfig: { temperature: 0.4, maxOutputTokens: 4096 },
   };
   const doFetch = async (bearer: string) => fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.model)}:generateContent`,
-    { method: "POST", signal, headers: { "Content-Type": "application/json", Authorization: `Bearer ${bearer}` }, body: JSON.stringify(body) },
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.model)}:generateContent?key=${encodeURIComponent(bearer)}`,
+    { method: "POST", signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
   );
   let response = await doFetch(token);
   if (response.status === 401 || response.status === 403) {
     const retry = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.model)}:generateContent?key=${encodeURIComponent(token)}`,
-      { method: "POST", signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.model)}:generateContent`,
+      { method: "POST", signal, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) },
     );
     if (retry.ok) response = retry;
   }
@@ -297,7 +302,7 @@ function extractCommand(reply: string): { text: string; command: string | null }
 function requestApproval(command: string): Promise<{ approved: boolean; reason?: string }> {
   if (autoApprove) return Promise.resolve({ approved: true });
   return new Promise((resolve) => {
-    const approval_id = nextEventId;
+    const approval_id = nextApprovalId++;
     pending = { approval_id, command, resolve };
     pushEvent({ type: "command_pending", command, approval_id });
   });
@@ -312,29 +317,31 @@ async function runAgent(userText: string, attachments: { name: string; path: str
   const abort = new AbortController();
   currentAbort = abort;
   const note = attachments.length ? `\n\nپیوست‌ها: ${attachments.map((a) => a.path).join(", ")}` : "";
-  history.push({ role: "user", text: userText + note });
+  pushHistory({ role: "user", text: userText + note });
   try {
     for (let step = 0; step < 6 && !abort.signal.aborted; step++) {
+      pushEvent({ type: "thinking", step: step + 1, text: step === 0 ? "در حال تحلیل درخواست…" : "در حال بررسی نتیجه و ادامه…" });
       const reply = await callModel(history.slice(-historyLimit()), abort.signal);
       if (!reply) { pushEvent({ type: "error", text: "مدل پاسخ خالی داد." }); break; }
       const { text, command } = extractCommand(reply);
       if (text) {
-        history.push({ role: "model", text });
+        pushHistory({ role: "model", text });
         pushEvent({ type: "assistant", text });
       }
       if (!command) break;
+      if (autoApprove) pushEvent({ type: "tool_call", tool: "shell", command, cwd: WORKSPACE });
       const decision = await requestApproval(command);
       if (!decision.approved) {
         pushEvent({ type: "notice", text: `فرمان اجرا نشد: ${decision.reason || "رد شد"}` });
-        history.push({ role: "user", text: `Command was rejected by the user: ${command}. Ask what to do instead.` });
+        pushHistory({ role: "user", text: `Command was rejected by the user: ${command}. Ask what to do instead.` });
         break;
       }
       pending = null;
       pushEvent({ type: "command_running", command });
       const result = await runShell(command);
-      pushEvent({ type: "command_result", command, exitCode: result.exitCode, output: result.output.slice(-8000) });
+      pushEvent({ type: "tool_result", tool: "shell", command, exitCode: result.exitCode, output: result.output.slice(-8000) });
       if (abort.signal.aborted) break;
-      history.push({ role: "user", text: `Command: ${command}\nExit code: ${result.exitCode}\nOutput:\n${result.output.slice(-8000)}\n\nContinue.` });
+      pushHistory({ role: "user", text: `Command: ${command}\nExit code: ${result.exitCode}\nOutput:\n${result.output.slice(-8000)}\n\nContinue.` });
     }
   } catch (error) {
     if (!abort.signal.aborted) pushEvent({ type: "error", text: error instanceof Error ? error.message : String(error) });
@@ -377,7 +384,7 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(cors({ origin: `http://127.0.0.1:${PORT}` }));
+app.use(cors({ origin: [`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`] }));
 app.use(express.json({ limit: "25mb" }));
 app.use(express.static(WEB_DIR, { index: "index.html" }));
 
@@ -495,6 +502,12 @@ app.post("/api/config", (req, res) => {
 });
 
 app.get("/api/models", (_req, res) => {
+  const keyByProvider: Record<string, keyof Config> = {
+    gemini: "apiKey",
+    mistral: "mistralApiKey",
+    deepseek: "deepseekApiKey",
+    openrouter: "openrouterApiKey",
+  };
   res.json({
     provider: config.provider,
     model: config.model,
@@ -502,7 +515,7 @@ app.get("/api/models", (_req, res) => {
       id: p.id,
       label: p.label,
       free: false,
-      configured: Boolean(p.env.some((name) => process.env[name])) || Boolean(config[`${p.id === "gemini" ? "apiKey" : `${p.id}ApiKey`}` as keyof Config]),
+      configured: Boolean(p.env.some((name) => process.env[name])) || Boolean(config[keyByProvider[p.id]]),
       models: p.models.map((id) => ({ id })),
     })),
   });
@@ -617,9 +630,6 @@ app.get("/api/github/repo-tree", async (req, res) => {
 app.use((_req, res) => {
   res.status(404).json({ error: "not found" });
 });
-
-const require = createRequire(import.meta.url);
-void require;
 
 fs.mkdirSync(WORKSPACE, { recursive: true });
 
