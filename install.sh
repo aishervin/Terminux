@@ -1,10 +1,9 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# Terminux Installer - Ultra Professional Edition
+# Terminux installer — graphical Termux setup
 # Usage: curl -fsSL https://raw.githubusercontent.com/aishervin/Terminux/main/install.sh | bash
 
 set -uo pipefail
 
-# === CONFIGURATION ===
 REPO_URL="${TERMINUX_REPO:-https://github.com/aishervin/Terminux.git}"
 BRANCH="${TERMINUX_BRANCH:-main}"
 INSTALL_DIR="${TERMINUX_DIR:-$HOME/Terminux}"
@@ -12,219 +11,193 @@ WORKSPACE_DIR="${TERMINUX_WORKSPACE:-$HOME/Terminux-workspace}"
 PREFIX_BIN="${PREFIX:-/data/data/com.termux/files/usr}/bin"
 TERMUX_BASH="${PREFIX:-/data/data/com.termux/files/usr}/bin/bash"
 
-# === COLORS ===
+# ── colors ──
 if [[ -t 1 ]]; then
-  declare -A colors=(
-    [reset]="\033[0m"
-    [bold]="\033[1m"
-    [dim]="\033[2m"
-    [red]="\033[38;5;196m"
-    [green]="\033[38;5;114m"
-    [yellow]="\033[38;5;226m"
-    [blue]="\033[38;5;33m"
-    [purple]="\033[38;5;201m"
-    [cyan]="\033[38;5;51m"
-    [white]="\033[97m"
-    [gray]="\033[90m"
-    [orange]="\033[38;5;208m"
-  )
+  O=$'\033[38;5;208m'; W=$'\033[97m'; D=$'\033[90m'
+  OK=$'\033[38;5;114m'; E=$'\033[38;5;203m'; C=$'\033[36m'
+  B=$'\033[1m'; R=$'\033[0m'; DIM=$'\033[2m'
 else
-  for color in reset bold dim red green yellow blue purple cyan white gray orange; do
-    colors[$color]=""
-  done
+  O= W= D= OK= E= C= B= R= DIM=
 fi
 
-# === GLOBALS ===
-SPIN_PID=""
+PROGRESS=0
 TOTAL_STEPS=5
-CURRENT_STEP=0
 
-# === CLEANUP ===
-cleanup() {
-  [[ -n "$SPIN_PID" ]] && kill "$SPIN_PID" 2>/dev/null
-  tput cnorm 2>/dev/null
-}
+cleanup() { tput cnorm 2>/dev/null || true; }
 trap cleanup EXIT
+trap 'fail "Installation aborted by signal."' INT TERM
 
-# === FAIL ===
 fail() {
-  cleanup
-  printf "\n\n  ${colors[red]}${colors[bold]}✗ INSTALLATION FAILED${colors[reset]}\n"
-  printf "  ${colors[red]}%s${colors[reset]}\n\n" "$*" >&2
+  printf "\n\n  ${E}${B}[X] Installation failed${R}\n  ${E}%s${R}\n\n" "$*" >&2
   exit 1
 }
 
-# === SPINNER ===
-spin_frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-start_spinner() {
-  local msg="${1:-Processing...}"
-  cleanup
-  [[ -t 1 ]] || { printf "  %s\n" "$msg"; return; }
-  tput civis 2>/dev/null
-  ( i=0
-    while true; do
-      printf "\r  ${colors[orange]}${spin_frames[i]}${colors[reset]}  ${colors[white]}%s${colors[reset]}  " "$msg"
-      i=$(( (i+1) % ${#spin_frames[@]} ))
-      sleep 0.08
-    done ) &
-  SPIN_PID=$!
+# ── logo / loading splash (block-art structure) ──
+print_logo() {
+  printf "\n%s\n\n" "${O}${B} TERMINUX by ☬ SHΞЯVIN™"
+  cat << 'LOGO'
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⠉⠉⠉⠉⠉⠉⠉⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⡿⠟⠋⢀⣤⣾⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⠉⠀⠀⠚⠛⠛⠛⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣶⣶⣶⣶⣶⣶⣶⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣀⣀⣀⣀⣀⣀⣀⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⠀⠉⠛⠿⠿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣷⣶⣤⠤⠀⠉⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⠉⠉⢀⣀⣤⣶⣾⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⠒⠛⠛⠛⠛⠛⠛⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⠀⣶⣶⠀⢰⣶⣶⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⡀⠙⠋⢀⡀⠈⠛⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⠿⣶⡶⠿⣿⣿⠶⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⠀⣿⡇⠀⣿⣿⠀⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⠀⣿⣇⣀⣿⣿⠀⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⠛⠛⠛⠛⠛⠛⠛⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣶⣶⣶⠀⣶⣶⣶⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⠿⠿⠿⠀⠿⠿⠿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣤⣤⣤⣤⣤⣤⣤⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⠋⢀⣿⠋⢀⡀⠙⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣇⠀⢿⡏⢀⣾⡿⠀⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣤⣀⣀⣼⣇⣀⣰⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+LOGO
+  printf "\n  ${D}☬  Exclusive  SHΞN™   made${R}\n"
+  printf "  ${D}────────────────────────────────────────────────────${R}\n"
+  printf "  ${W}${B}local AI coding agent${R}  ${D}·${R}  ${O}SHΞN™${R}  ${D}·${R}  ${C}Termux${R}\n"
+  printf "  ${D}────────────────────────────────────────────────────${R}\n\n"
 }
 
-# === PROGRESS BAR ===
-draw_progress() {
-  local pct=$1
-  local label="${2:-}"
-  local width=30
+# ── thick linear progress bar (double-width blocks) ──
+draw_bar() {
+  local pct="$1" label="${2:-}"
+  local width=25
   local filled=$(( pct * width / 100 ))
+  (( filled > width )) && filled=$width
   local empty=$(( width - filled ))
-
-  local bar=""
-  for ((i=0; i<filled; i++)); do bar+="█"; done
-  for ((i=0; i<empty; i++)); do bar+="░"; done
-
-  printf "\r  ${colors[gray]}[${colors[green]}%s${colors[gray]}]${colors[reset]} ${colors[white]}%3d%%${colors[reset]} ${colors[dim]}%s${colors[reset]}\033[K\n" "$bar" "$pct" "$label"
+  local bar="" i
+  for (( i=0; i<filled; i++ )); do bar+="██"; done
+  for (( i=0; i<empty; i++ )); do bar+="░░"; done
+  if [[ -t 1 ]]; then
+    printf "\r  ${D}[${O}%s${D}]${R} ${W}%3d%%${R}  ${DIM}%s${R}\033[K" "$bar" "$pct" "$label"
+  else
+    printf "  [%s] %3d%%  %s\n" "$bar" "$pct" "$label"
+  fi
 }
 
-# === STEP COMPLETE ===
 step_done() {
-  local title="$1"
-  CURRENT_STEP=$((CURRENT_STEP + 1))
-  local pct=$(( CURRENT_STEP * 100 / TOTAL_STEPS ))
-  cleanup
-  draw_progress "$pct" "$title"
-  printf "  ${colors[green]}${colors[bold]}✓${colors[reset]} ${colors[white]}%s${colors[reset]}\n" "$title"
+  local n="$1" title="$2"
+  PROGRESS=$(( n * 100 / TOTAL_STEPS ))
+  draw_bar "$PROGRESS" ""
+  printf "\n  ${OK}✓${R}  ${W}%s${R}\n" "$title"
 }
 
-# === PIXEL ART BANNER ===
-show_banner() {
-  clear 2>/dev/null
-
-  printf "${colors[purple]}${colors[bold]}\n"
-  cat << 'EOF'
-   ████████████████████████████████████████
-  ████████████████████████████████████████
- ███████████████████████████████████████████
-██████      TERMINUX      ████████████████
-██████   AI Coding Agent   ██████████████
-█████████████████████████████████████
- █████████████████████████████████████
-  ██████████████████████████████████
-   ███████████████████████████████
-EOF
-  printf "${colors[reset]}\n"
-
-  printf "  ${colors[gray]}════════════════════════════════════════════════════════${colors[reset]}\n"
-  printf "  ${colors[white]}${colors[bold]}       TERMINUX - Local AI Coding Agent${colors[reset]}\n"
-  printf "  ${colors[gray]}════════════════════════════════════════════════════════${colors[reset]}\n\n"
-  printf "  ${colors[white]}Install Dir:${colors[reset]}   ${colors[cyan]}%s${colors[reset]}\n" "$INSTALL_DIR"
-  printf "  ${colors[white]}Workspace:${colors[reset]}   ${colors[cyan]}%s${colors[reset]}\n\n" "$WORKSPACE_DIR"
-}
-
-# === RUN QUIETLY ===
 run_quiet() {
   local log
   log="$(mktemp 2>/dev/null || echo /tmp/terminux-install.log)"
-  local code=0
-  "$@" >"$log" 2>&1 || code=$?
-  if [[ "$code" -eq 0 ]]; then
-    rm -f "$log" 2>/dev/null
+  if "$@" >"$log" 2>&1; then
+    rm -f "$log" 2>/dev/null || true
     return 0
   fi
-  cleanup
-  printf "\n  ${colors[yellow]}Error:${colors[reset]}\n"
+  local code=$?
+  printf "\n  ${E}Error output:${R}\n"
   tail -n 25 "$log" 2>/dev/null | sed 's/^/    /' >&2 || true
-  rm -f "$log" 2>/dev/null
+  rm -f "$log" 2>/dev/null || true
   return "$code"
 }
 
-# === MAIN INSTALLATION ===
-show_banner
+# ── preflight ──
+clear 2>/dev/null || true
+print_logo
+command -v pkg >/dev/null 2>&1 || fail "This installer only runs on Termux (pkg command not found)."
 
-# Check pkg
-command -v pkg >/dev/null 2>&1 || fail "pkg not found. Install Termux first."
-
-printf "  ${colors[dim]}Initializing installation...${colors[reset]}\n\n"
-draw_progress 0 "Starting..."
+printf "  ${D}Install dir:${R}  ${W}%s${R}\n" "$INSTALL_DIR"
+printf "  ${D}Workspace:${R}    ${W}%s${R}\n\n" "$WORKSPACE_DIR"
+draw_bar 0 "starting..."
 printf "\n"
 
-# Step 1: Update & Install Dependencies
-start_spinner "Step 1/5  Updating packages..."
-if ! run_quiet pkg update -y; then true; fi
-if ! run_quiet pkg install -y nodejs-lts git; then
-  run_quiet pkg install -y nodejs git || fail "Failed to install dependencies"
+# ── 1/5 packages ──
+draw_bar 3 "updating packages (nodejs, git)..."
+if ! run_quiet pkg update -y; then
+  true   # soft-fail update, still try install
 fi
-command -v node >/dev/null 2>&1 || fail "node not found"
-command -v npm >/dev/null 2>&1 || fail "npm not found"
-command -v git >/dev/null 2>&1 || fail "git not found"
-step_done "Environment ready (node $(node -v 2>/dev/null | tr -d '\n'))"
+if ! run_quiet pkg install -y nodejs-lts git; then
+  run_quiet pkg install -y nodejs git || fail "Failed to install nodejs/git. Check output above."
+fi
+command -v node >/dev/null 2>&1 || fail "node not found after install."
+command -v npm  >/dev/null 2>&1 || fail "npm not found after install."
+command -v git  >/dev/null 2>&1 || fail "git not found after install."
+step_done 1 "Termux environment ready  (node $(node -v 2>/dev/null | tr -d '\n'))"
 
-# Step 2: Clone Repository
-start_spinner "Step 2/5  Cloning repository..."
+# ── 2/5 source ──
+draw_bar 25 "fetching source from GitHub..."
 mkdir -p "$(dirname "$INSTALL_DIR")"
 if [[ -d "$INSTALL_DIR/.git" ]]; then
-  if ! run_quiet git -C "$INSTALL_DIR" fetch --depth 1 origin "$BRANCH"; then
-    fail "git fetch failed"
-  fi
+  run_quiet git -C "$INSTALL_DIR" fetch --depth 1 origin "$BRANCH" \
+    || fail "git fetch failed. Check internet or GitHub access."
   run_quiet git -C "$INSTALL_DIR" checkout -f -B "$BRANCH" "origin/$BRANCH" \
     || run_quiet git -C "$INSTALL_DIR" pull --ff-only origin "$BRANCH" \
-    || fail "Failed to update repository"
+    || fail "Failed to update local repository."
 else
   rm -rf "$INSTALL_DIR"
   run_quiet git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR" \
-    || fail "Failed to clone: $REPO_URL"
+    || fail "Failed to clone repository: $REPO_URL"
 fi
-[[ -f "$INSTALL_DIR/package.json" ]] || fail "package.json not found"
-[[ -f "$INSTALL_DIR/src/server.ts" ]] || fail "src/server.ts not found"
-step_done "Repository cloned"
+[[ -f "$INSTALL_DIR/package.json" ]] || fail "package.json not found in $INSTALL_DIR."
+[[ -f "$INSTALL_DIR/server.ts" ]]    || fail "server.ts not found — clone is incomplete."
+step_done 2 "Source downloaded"
 
-# Step 3: Install NPM Dependencies
-start_spinner "Step 3/5  Installing dependencies..."
+# ── 3/5 npm ──
+draw_bar 45 "installing npm dependencies (may take a few minutes)..."
 if ! run_quiet npm install --prefix "$INSTALL_DIR" --no-audit --no-fund; then
-  rm -rf "$INSTALL_DIR/node_modules"
+  rm -rf "$INSTALL_DIR/node_modules" "$INSTALL_DIR/package-lock.json"
   run_quiet npm install --prefix "$INSTALL_DIR" --no-audit --no-fund \
-    || fail "npm install failed"
+    || fail "npm install failed."
 fi
-[[ -x "$INSTALL_DIR/node_modules/.bin/tsx" ]] || [[ -f "$INSTALL_DIR/node_modules/tsx/dist/cli.mjs" ]] \
-  || fail "tsx not found"
-step_done "Dependencies installed"
+if [[ ! -x "$INSTALL_DIR/node_modules/.bin/tsx" ]] && [[ ! -f "$INSTALL_DIR/node_modules/tsx/dist/cli.mjs" ]]; then
+  fail "tsx was not installed. Check npm install manually in $INSTALL_DIR."
+fi
+step_done 3 "Dependencies installed"
 
-# Step 4: Create Launcher
-start_spinner "Step 4/5  Creating launcher..."
-mkdir -p "$PREFIX_BIN" "$WORKSPACE_DIR" || fail "Failed to create directories"
+# ── 4/5 launcher ──
+draw_bar 65 "creating 'terminux' launcher..."
+mkdir -p "$PREFIX_BIN" "$WORKSPACE_DIR" || fail "Failed to create bin/workspace directories."
 cat > "$PREFIX_BIN/terminux" <<EOF
 #!${TERMUX_BASH}
+# Terminux launcher
 export TERMINUX_WORKSPACE="${WORKSPACE_DIR}"
 cd "${INSTALL_DIR}" || exit 1
-while true; do
-  if [[ -x ./node_modules/.bin/tsx ]]; then ./node_modules/.bin/tsx src/server.ts; else npm start; fi
-  code=\$?
-  [[ \$code -eq 75 ]] || exit \$code
-  echo "→ Restarting Terminux..."
-  sleep 1
-done
+if [[ -x ./node_modules/.bin/tsx ]]; then
+  exec ./node_modules/.bin/tsx server.ts
+fi
+exec npm start
 EOF
-chmod 700 "$PREFIX_BIN/terminux" || fail "Failed to set permissions"
+chmod 700 "$PREFIX_BIN/terminux" || fail "chmod on launcher failed."
 command -v terminux >/dev/null 2>&1 || export PATH="$PREFIX_BIN:$PATH"
-step_done "Launcher created"
+step_done 4 "Launcher 'terminux' ready"
 
-# Step 5: Setup Workspace
-start_spinner "Step 5/5  Setting up workspace..."
-mkdir -p "$WORKSPACE_DIR" "$HOME/.config/terminux" "$INSTALL_DIR/workspace" 2>/dev/null || true
+# ── 5/5 workspace ──
+draw_bar 85 "preparing workspace..."
+mkdir -p "$WORKSPACE_DIR" \
+  "$HOME/.config/terminux" \
+  "$INSTALL_DIR/workspace" 2>/dev/null || true
 : >> "$WORKSPACE_DIR/.terminux_ready" 2>/dev/null || true
-step_done "Workspace ready"
+step_done 5 "Workspace ready"
 
-# === COMPLETION ===
-cleanup
-draw_progress 100 "Complete"
+# ── done ──
+draw_bar 100 "complete"
 printf "\n\n"
-printf "  ${colors[green]}${colors[bold]}✓ TERMINUX INSTALLED SUCCESSFULLY!${colors[reset]}\n\n"
-printf "  ${colors[gray]}Install Dir:${colors[reset]}   ${colors[white]}%s${colors[reset]}\n" "$INSTALL_DIR"
-printf "  ${colors[gray]}Workspace:${colors[reset]}   ${colors[white]}%s${colors[reset]}\n" "$WORKSPACE_DIR"
-printf "  ${colors[gray]}Command:${colors[reset]}     ${colors[cyan]}terminux${colors[reset]}\n"
-printf "  ${colors[gray]}Web UI:${colors[reset]}      ${colors[cyan]}http://127.0.0.1:3000${colors[reset]}\n\n"
-printf "  ${colors[gray]}════════════════════════════════════════════════════════${colors[reset]}\n"
-printf "  ${colors[orange]}→ Run ${colors[bold]}terminux${colors[reset]}${colors[orange]} to start!${colors[reset]}\n"
-printf "  ${colors[gray]}════════════════════════════════════════════════════════${colors[reset]}\n\n"
+printf "  ${OK}${B}✓ Terminux installation completed successfully${R}\n\n"
+printf "  ${D}Install dir:${R}   ${W}%s${R}\n" "$INSTALL_DIR"
+printf "  ${D}Workspace:${R}     ${W}%s${R}\n" "$WORKSPACE_DIR"
+printf "  ${D}Run:${R}           ${O}${B}terminux${R}\n"
+printf "  ${D}Web URL:${R}       ${C}http://127.0.0.1:3000${R}\n\n"
+printf "  ${D}────────────────────────────────────────────────────${R}\n"
+printf "  ${O}▶${R}  Starting server...\n\n"
 
+cd "$INSTALL_DIR" || fail "Failed to enter $INSTALL_DIR."
+export TERMINUX_WORKSPACE="$WORKSPACE_DIR"
 export PATH="$PREFIX_BIN:$PATH"
-exec "$PREFIX_BIN/terminux"
+
+if [[ -x ./node_modules/.bin/tsx ]]; then
+  exec ./node_modules/.bin/tsx server.ts
+fi
+exec npm start
