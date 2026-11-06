@@ -533,7 +533,19 @@ async function executeTool(name: string, args: Record<string, any>): Promise<any
     const timeout = (args.timeout_seconds || 300) * 1000;
     return new Promise((resolve) => {
       let output = '';
-      const proc = spawn('sh', ['-c', cmd], { cwd: WORKSPACE_DIR, env: process.env });
+      const shellEnv: NodeJS.ProcessEnv = { ...process.env };
+      if (config.pass_tokens_to_shell) {
+        if (config.github_token) shellEnv.GITHUB_TOKEN = config.github_token;
+        if (config.github_token) shellEnv.GH_TOKEN = config.github_token;
+        if (config.cloudflare_token) shellEnv.CLOUDFLARE_API_TOKEN = config.cloudflare_token;
+        if (config.linear_api_key) shellEnv.LINEAR_API_KEY = config.linear_api_key;
+        if (config.hf_token) shellEnv.HF_TOKEN = config.hf_token;
+        if (config.api_key) shellEnv.GEMINI_API_KEY = config.api_key;
+        if (config.mistral_api_key) shellEnv.MISTRAL_API_KEY = config.mistral_api_key;
+        if (config.deepseek_api_key) shellEnv.DEEPSEEK_API_KEY = config.deepseek_api_key;
+        if (config.openrouter_api_key) shellEnv.OPENROUTER_API_KEY = config.openrouter_api_key;
+      }
+      const proc = spawn('sh', ['-c', cmd], { cwd: WORKSPACE_DIR, env: shellEnv });
       
       const timer = setTimeout(() => {
         try { proc.kill('SIGTERM'); } catch (_) {}
@@ -614,16 +626,23 @@ async function executeTool(name: string, args: Record<string, any>): Promise<any
   if (name === 'github_api') {
     if (!config.github_token) return { error: 'توکن GitHub تنظیم نشده است.' };
     try {
-      const res = await fetch(`https://api.github.com${args.path}`, {
-        method: args.method || 'GET',
-        headers: {
-          Authorization: `Bearer ${config.github_token}`,
-          Accept: 'application/vnd.github+json',
-          'User-Agent': 'Terminux-Agent'
-        },
-        body: args.body ? JSON.stringify(args.body) : undefined
-      });
-      const data = await res.json();
+      let apiPath = String(args.path || '/').trim();
+      if (!apiPath.startsWith('/')) apiPath = '/' + apiPath;
+      const method = String(args.method || 'GET').toUpperCase();
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${config.github_token}`,
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'Terminux-Agent'
+      };
+      let body: string | undefined;
+      if (args.body !== undefined && method !== 'GET' && method !== 'HEAD') {
+        headers['Content-Type'] = 'application/json';
+        body = JSON.stringify(args.body);
+      }
+      const res = await fetch(`https://api.github.com${apiPath}`, { method, headers, body });
+      const text = await res.text();
+      let data: any = text;
+      try { data = JSON.parse(text); } catch (_) {}
       return { status: res.status, success: res.ok, data };
     } catch (e: any) {
       return { error: e.message };
@@ -654,6 +673,265 @@ async function executeTool(name: string, args: Record<string, any>): Promise<any
     }
   }
 
+  if (name === 'github_publish_workspace') {
+    if (!config.github_token) return { error: 'توکن GitHub تنظیم نشده است.' };
+    const owner = String(args.owner || '').trim();
+    const repo = String(args.repo || '').trim();
+    const message = String(args.message || 'Update from Terminux').trim();
+    if (!owner || !repo) return { error: 'owner و repo الزامی هستند.' };
+    try {
+      const files: { path: string; content: string }[] = [];
+      const skipNames = new Set(['node_modules', '.git', 'dist', '.terminux-uploads']);
+      function walk(dir: string, rel: string) {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (skipNames.has(entry.name) || entry.name.startsWith('.')) continue;
+          const full = path.join(dir, entry.name);
+          const r = rel ? rel + '/' + entry.name : entry.name;
+          if (entry.isDirectory()) walk(full, r);
+          else if (entry.isFile()) {
+            const buf = fs.readFileSync(full);
+            if (buf.length > 1_000_000) continue;
+            const text = buf.toString('utf-8');
+            if (text.includes('\u0000')) continue;
+            files.push({ path: r, content: text });
+          }
+        }
+      }
+      walk(WORKSPACE_DIR, '');
+      if (!files.length) return { error: 'هیچ فایل متنی قابل انتشار در فضای کاری پیدا نشد.' };
+
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${config.github_token}`,
+        Accept: 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'Terminux-Agent'
+      };
+
+      const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers });
+      if (!repoRes.ok) {
+        const t = await repoRes.text();
+        return { error: `مخزن یافت نشد یا دسترسی ندارید (${repoRes.status}): ${t.slice(0, 200)}` };
+      }
+      const repoData: any = await repoRes.json();
+      const branch = repoData.default_branch || 'main';
+      const refRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/ref/heads/${branch}`, { headers });
+      if (!refRes.ok) {
+        const t = await refRes.text();
+        return { error: `دریافت شاخه ${branch} ناموفق (${refRes.status}): ${t.slice(0, 200)}` };
+      }
+      const refData: any = await refRes.json();
+      const baseSha = refData.object?.sha;
+      if (!baseSha) return { error: 'SHA شاخه پیدا نشد.' };
+
+      const commitRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/commits/${baseSha}`, { headers });
+      const commitData: any = await commitRes.json();
+      const baseTree = commitData.tree?.sha;
+      if (!baseTree) return { error: 'tree پایه پیدا نشد.' };
+
+      const treeItems: any[] = [];
+      for (const f of files.slice(0, 200)) {
+        const blobRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/blobs`, {
+          method: 'POST', headers, body: JSON.stringify({ content: f.content, encoding: 'utf-8' })
+        });
+        if (!blobRes.ok) {
+          const t = await blobRes.text();
+          return { error: `ساخت blob برای ${f.path} ناموفق: ${t.slice(0, 200)}` };
+        }
+        const blob: any = await blobRes.json();
+        treeItems.push({ path: f.path, mode: '100644', type: 'blob', sha: blob.sha });
+      }
+      const treeRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ base_tree: baseTree, tree: treeItems })
+      });
+      if (!treeRes.ok) {
+        const t = await treeRes.text();
+        return { error: `ساخت tree ناموفق: ${t.slice(0, 200)}` };
+      }
+      const tree: any = await treeRes.json();
+
+      const newCommitRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/commits`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ message, tree: tree.sha, parents: [baseSha] })
+      });
+      if (!newCommitRes.ok) {
+        const t = await newCommitRes.text();
+        return { error: `ساخت commit ناموفق: ${t.slice(0, 200)}` };
+      }
+      const newCommit: any = await newCommitRes.json();
+
+      const updateRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
+        method: 'PATCH', headers,
+        body: JSON.stringify({ sha: newCommit.sha })
+      });
+      if (!updateRes.ok) {
+        const t = await updateRes.text();
+        return { error: `به‌روزرسانی شاخه ناموفق: ${t.slice(0, 200)}` };
+      }
+      return {
+        ok: true,
+        owner, repo, branch,
+        commit: newCommit.sha,
+        files: files.length,
+        url: `https://github.com/${owner}/${repo}/commit/${newCommit.sha}`
+      };
+    } catch (e: any) {
+      return { error: e.message };
+    }
+  }
+
+  if (name === 'cloudflare_api') {
+    if (!config.cloudflare_token) return { error: 'توکن Cloudflare تنظیم نشده است.' };
+    try {
+      let apiPath = String(args.path || '/').trim();
+      if (!apiPath.startsWith('/')) apiPath = '/' + apiPath;
+      const method = String(args.method || 'GET').toUpperCase();
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${config.cloudflare_token}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'Terminux-Agent'
+      };
+      const res = await fetch(`https://api.cloudflare.com/client/v4${apiPath}`, {
+        method,
+        headers,
+        body: args.body !== undefined && method !== 'GET' ? JSON.stringify(args.body) : undefined
+      });
+      const data = await res.json();
+      return { status: res.status, success: res.ok, data };
+    } catch (e: any) {
+      return { error: e.message };
+    }
+  }
+
+  if (name === 'linear_api') {
+    if (!config.linear_api_key) return { error: 'کلید Linear تنظیم نشده است.' };
+    try {
+      const res = await fetch('https://api.linear.app/graphql', {
+        method: 'POST',
+        headers: {
+          Authorization: config.linear_api_key,
+          'Content-Type': 'application/json',
+          'User-Agent': 'Terminux-Agent'
+        },
+        body: JSON.stringify({ query: args.query, variables: args.variables || {} })
+      });
+      const data = await res.json();
+      return { status: res.status, success: res.ok, data };
+    } catch (e: any) {
+      return { error: e.message };
+    }
+  }
+
+  if (name === 'hf_api') {
+    if (!config.hf_token) return { error: 'توکن Hugging Face تنظیم نشده است.' };
+    try {
+      let apiPath = String(args.path || '/').trim();
+      if (!apiPath.startsWith('/')) apiPath = '/' + apiPath;
+      const method = String(args.method || 'GET').toUpperCase();
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${config.hf_token}`,
+        'User-Agent': 'Terminux-Agent'
+      };
+      let body: string | undefined;
+      if (args.body !== undefined && method !== 'GET') {
+        headers['Content-Type'] = 'application/json';
+        body = JSON.stringify(args.body);
+      }
+      const res = await fetch(`https://huggingface.co/api${apiPath}`, { method, headers, body });
+      const text = await res.text();
+      let data: any = text;
+      try { data = JSON.parse(text); } catch (_) {}
+      return { status: res.status, success: res.ok, data };
+    } catch (e: any) {
+      return { error: e.message };
+    }
+  }
+
+  if (name === 'gmail_api') {
+    if (!config.gmail_address || !config.gmail_app_password) {
+      return { error: 'آدرس Gmail و App Password تنظیم نشده است.' };
+    }
+    const action = String(args.action || '').toLowerCase();
+    if (action === 'send') {
+      if (!args.to || !args.subject) return { error: 'برای ارسال ایمیل، to و subject الزامی است.' };
+      return {
+        error: 'ارسال مستقیم SMTP از این محیط نیاز به ماژول nodemailer دارد. فعلاً از run_shell با دستور مناسب یا تنظیم MCP استفاده کنید.',
+        hint: `از: ${config.gmail_address} → به: ${args.to} · موضوع: ${args.subject}`
+      };
+    }
+    return { error: `عملیات Gmail «${action}» هنوز پشتیبانی کامل ندارد. از MCP یا run_shell استفاده کنید.` };
+  }
+
+  if (name === 'drive_api') {
+    if (!config.drive_refresh_token) return { error: 'توکن Google Drive تنظیم نشده است.' };
+    try {
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: config.drive_client_id,
+          client_secret: config.drive_client_secret,
+          refresh_token: config.drive_refresh_token,
+          grant_type: 'refresh_token'
+        }).toString()
+      });
+      if (!tokenRes.ok) {
+        const t = await tokenRes.text();
+        return { error: 'تازه‌سازی توکن Drive ناموفق: ' + t.slice(0, 200) };
+      }
+      const tok: any = await tokenRes.json();
+      const access = tok.access_token;
+      let apiPath = String(args.path || '/drive/v3/files').trim();
+      if (!apiPath.startsWith('/')) apiPath = '/' + apiPath;
+      const method = String(args.method || 'GET').toUpperCase();
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${access}`,
+        'User-Agent': 'Terminux-Agent'
+      };
+      let body: string | undefined;
+      if (args.body !== undefined && method !== 'GET') {
+        headers['Content-Type'] = 'application/json';
+        body = JSON.stringify(args.body);
+      }
+      const res = await fetch(`https://www.googleapis.com${apiPath}`, { method, headers, body });
+      const text = await res.text();
+      let data: any = text;
+      try { data = JSON.parse(text); } catch (_) {}
+      return { status: res.status, success: res.ok, data };
+    } catch (e: any) {
+      return { error: e.message };
+    }
+  }
+
+  if (name === 'mcp_call') {
+    const servers = config.mcp_servers || {};
+    const serverName = String(args.server || '').trim();
+    if (!serverName || !servers[serverName]) {
+      return { error: 'سرور MCP با این نام پیکربندی نشده است. در تنظیمات mcp_servers اضافه کنید.' };
+    }
+    const srv = servers[serverName];
+    const base = String(srv.url || srv.endpoint || '').replace(/\/$/, '');
+    if (!base) return { error: 'آدرس سرور MCP خالی است.' };
+    try {
+      const toolName = String(args.tool || args.name || '').trim();
+      const payload = {
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: toolName ? 'tools/call' : 'tools/list',
+        params: toolName ? { name: toolName, arguments: args.arguments || args.args || {} } : {}
+      };
+      const headers: Record<string, string> = { 'Content-Type': 'application/json', 'User-Agent': 'Terminux-Agent' };
+      if (srv.token) headers['Authorization'] = 'Bearer ' + srv.token;
+      const res = await fetch(base + (srv.path || '/mcp'), {
+        method: 'POST', headers, body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      return { status: res.status, success: res.ok, data };
+    } catch (e: any) {
+      return { error: e.message };
+    }
+  }
+
   if (name === 'self_update') {
     return new Promise((resolve) => {
       exec('git pull --ff-only', { cwd: APP_DIR }, (err, stdout, stderr) => {
@@ -668,7 +946,7 @@ async function executeTool(name: string, args: Record<string, any>): Promise<any
     return { ok: true, note: 'سرور تا چند ثانیه دیگر دوباره بالا می‌آید.' };
   }
 
-  return { error: `ابزار «${name}» هنوز پیاده‌سازی نشده است؛ هیچ عملیاتی انجام نشد.` };
+  return { error: `ابزار «${name}» شناخته نشد؛ هیچ عملیاتی انجام نشد.` };
 }
 
 async function callModelWithTools(historyList: any[]): Promise<{ text?: string; functionCalls?: any[] }> {
@@ -968,8 +1246,11 @@ async function runAgent(userMsg: string, attachments: any[]) {
   }
 }
 
-// Routes
-app.get(['/', '/index.html'], (req: Request, res: Response) => {
+// Routes — static UI + API
+app.use('/web', express.static(WEB_DIR, { index: 'index.html', fallthrough: true }));
+app.use(express.static(WEB_DIR, { index: false, fallthrough: true }));
+
+app.get(['/', '/index.html', '/web', '/web/', '/web/index.html'], (req: Request, res: Response) => {
   const indexPath = path.join(WEB_DIR, 'index.html');
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
