@@ -667,7 +667,7 @@ function richBlocks(text){
     }
     function updateSend(){
       if(pending)return;
-      sendButton.disabled=isRunning||uploading>0||(!promptBox.value.trim()&&!uploads.length);
+      sendButton.disabled=uploading>0||(!promptBox.value.trim()&&!uploads.length);
     }
     async function uploadSelection(files){
       const remaining=Math.max(0,5-uploads.length-uploading),chosen=files.slice(0,remaining);if(files.length>remaining)appendMessage('error','حداکثر ۵ فایل برای هر پیام.','بارگذاری');
@@ -684,6 +684,17 @@ function richBlocks(text){
 
     /* Drag to Run Gesture Handler */
     let dragStartX=0,isDraggingSend=false,currentMaxDrag=100;
+    sendButton.onclick = async () => {
+      if (isRunning) {
+        try {
+          await api('/api/stop', {});
+        } catch (err) {
+          console.error('Failed to stop:', err);
+        }
+      } else {
+        await sendPrompt();
+      }
+    };
     sendButton.addEventListener('pointerdown',e=>{
       if(!pending)return;
       isDraggingSend=true;
