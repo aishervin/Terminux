@@ -1,9 +1,10 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# Terminux installer — graphical Termux setup
+# Terminux installer - Professional Termux Setup
 # Usage: curl -fsSL https://raw.githubusercontent.com/aishervin/Terminux/main/install.sh | bash
 
 set -uo pipefail
 
+# Configuration
 REPO_URL="${TERMINUX_REPO:-https://github.com/aishervin/Terminux.git}"
 BRANCH="${TERMINUX_BRANCH:-main}"
 INSTALL_DIR="${TERMINUX_DIR:-$HOME/Terminux}"
@@ -11,36 +12,42 @@ WORKSPACE_DIR="${TERMINUX_WORKSPACE:-$HOME/Terminux-workspace}"
 PREFIX_BIN="${PREFIX:-/data/data/com.termux/files/usr}/bin"
 TERMUX_BASH="${PREFIX:-/data/data/com.termux/files/usr}/bin/bash"
 
-# ── colors (disable if not a TTY) ──────────────────────────────────
+# Colors
 if [[ -t 1 ]]; then
   O=$'\033[38;5;208m'; W=$'\033[97m'; D=$'\033[90m'
   OK=$'\033[38;5;114m'; E=$'\033[38;5;203m'; C=$'\033[36m'
   B=$'\033[1m'; R=$'\033[0m'; DIM=$'\033[2m'
+  P=$'\033[38;5;196m'; Y=$'\033[38;5;226m'
 else
-  O= W= D= OK= E= C= B= R= DIM=
+  O= W= D= OK= E= C= B= R= DIM= P= Y=
 fi
 
+# Global variables
 SPIN_PID=""
 PROGRESS=0
 TOTAL_STEPS=5
 
+# Cleanup function
 cleanup() {
   stop_spinner
   tput cnorm 2>/dev/null || true
 }
-trap cleanup EXIT
-trap 'fail "نصب با سیگنال قطع شد."' INT TERM
 
+trap cleanup EXIT
+
+# Fail function
 fail() {
   stop_spinner
-  printf "\n\n  ${E}${B}✕ نصب متوقف شد${R}\n  ${E}%s${R}\n\n" "$*" >&2
+  printf "\n\n  ${E}${B}✗ Installation Failed${R}\n  ${E}%s${R}\n\n" "$*" >&2
   exit 1
 }
 
-# ── spinner ────────────────────────────────────────────────────────
+# Spinner frames
 spin_frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+
+# Start spinner
 start_spinner() {
-  local msg="${1:-در حال کار…}"
+  local msg="${1:-Processing...}"
   stop_spinner
   [[ -t 1 ]] || { printf "  %s\n" "$msg"; return; }
   tput civis 2>/dev/null || true
@@ -55,6 +62,7 @@ start_spinner() {
   SPIN_PID=$!
 }
 
+# Stop spinner
 stop_spinner() {
   if [[ -n "${SPIN_PID:-}" ]] && kill -0 "$SPIN_PID" 2>/dev/null; then
     kill "$SPIN_PID" 2>/dev/null || true
@@ -64,7 +72,7 @@ stop_spinner() {
   [[ -t 1 ]] && printf "\r\033[K" || true
 }
 
-# ── progress bar ───────────────────────────────────────────────────
+# Progress bar
 draw_bar() {
   local pct="$1" label="${2:-}"
   local width=28
@@ -82,6 +90,7 @@ draw_bar() {
   fi
 }
 
+# Step completion
 step_done() {
   local n="$1" title="$2"
   PROGRESS=$(( n * 100 / TOTAL_STEPS ))
@@ -90,26 +99,39 @@ step_done() {
   printf "\n  ${OK}✓${R}  ${W}%s${R}\n" "$title"
 }
 
-# ── banner ─────────────────────────────────────────────────────────
-banner() {
+# Pixel Art Banner
+show_banner() {
   clear 2>/dev/null || true
-  printf "%s\n" "${O}${B}"
+  
+  # ASCII Art for Terminux
+  printf "${P}${B}"
   cat << 'ASCII'
-      ████████╗███████╗██████╗ ███╗   ███╗██╗███╗   ██╗██╗   ██╗██╗  ██╗
-      ╚══██╔══╝██╔════╝██╔══██╗████╗ ████║██║████╗  ██║██║   ██║╚██╗██╔╝
-         ██║   █████╗  ██████╔╝██╔████╔██║██║██╔██╗ ██║██║   ██║ ╚███╔╝
-         ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║██║██║╚██╗██║██║   ██║ ██╔██╗
-         ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║╚██████╔╝██╔╝ ██╗
-         ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝
+     █████████████████████████████████████████████
+    ██████████████████████████████████████████
+   ██████████████████████████████████████████
+  ███████████████████████████████████████████
+ █████████████████████████████████████████████
+███████████████████████████████████████████████
+ █████████████████████████████████████████████
+  █████████████████████████████████████████
+   ███████████████████████████████████████
+    ████████████████████████████████████
+     ██████████████████████████████████
 ASCII
-  printf "%s" "${R}"
-  printf "  ${D}────────────────────────────────────────────────────────${R}\n"
-  printf "  ${W}${B}local AI coding agent${R}  ${D}·${R}  ${O}SHΞN™${R}  ${D}·${R}  ${C}Termux${R}\n"
-  printf "  ${D}────────────────────────────────────────────────────────${R}\n\n"
+  printf "${R}"
+  
+  # Header
+  printf "  ${D}════════════════════════════════════════════════════════════${R}\n"
+  printf "  ${W}${B}         TERMINUX - Local AI Coding Agent${R}\n"
+  printf "  ${D}════════════════════════════════════════════════════════════${R}\n\n"
+  
+  # Info
+  printf "  ${W}Install Dir:${R}   ${C}%s${R}\n" "$INSTALL_DIR"
+  printf "  ${W}Workspace:${R}   ${C}%s${R}\n\n" "$WORKSPACE_DIR"
 }
 
+# Run command quietly
 run_quiet() {
-  # run command, capture output; on failure show last lines
   local log
   log="$(mktemp 2>/dev/null || echo /tmp/terminux-install.log)"
   local code=0
@@ -119,111 +141,106 @@ run_quiet() {
     return 0
   fi
   stop_spinner
-  printf "\n  ${E}خروجی خطا:${R}\n"
+  printf "\n  ${E}Error occurred:${R}\n"
   tail -n 25 "$log" 2>/dev/null | sed 's/^/    /' >&2 || true
   rm -f "$log" 2>/dev/null || true
   return "$code"
 }
 
-# ── preflight ──────────────────────────────────────────────────────
-banner
-command -v pkg >/dev/null 2>&1 || fail "این نصب‌کننده فقط روی Termux کار می‌کند (دستور pkg پیدا نشد)."
+# Main installation
+show_banner
 
-printf "  ${D}مسیر نصب:${R}  ${W}%s${R}\n" "$INSTALL_DIR"
-printf "  ${D}فضای کاری:${R} ${W}%s${R}\n\n" "$WORKSPACE_DIR"
-draw_bar 0 "شروع…"
+# Check for pkg
+command -v pkg >/dev/null 2>&1 || fail "pkg not found. Please install Termux first."
+
+printf "  ${D}Starting installation...${R}\n\n"
+draw_bar 0 "Initializing..."
 printf "\n"
 
-# ── 1/5 packages ───────────────────────────────────────────────────
-start_spinner "۱/۵  به‌روزرسانی و نصب بسته‌ها (nodejs git)…"
+# Step 1: Update and install packages
+start_spinner "Step 1/5  Updating packages and installing dependencies (nodejs, git)..."
 if ! run_quiet pkg update -y; then
-  # soft-fail update; still try install
   true
 fi
 if ! run_quiet pkg install -y nodejs-lts git; then
-  # fallback package names used on some Termux mirrors
-  run_quiet pkg install -y nodejs git || fail "نصب nodejs/git ناموفق بود. خروجی بالا را بررسی کن."
+  run_quiet pkg install -y nodejs git || fail "Failed to install nodejs/git. Please check your Termux setup."
 fi
-command -v node >/dev/null 2>&1 || fail "node بعد از نصب پیدا نشد."
-command -v npm  >/dev/null 2>&1 || fail "npm بعد از نصب پیدا نشد."
-command -v git  >/dev/null 2>&1 || fail "git بعد از نصب پیدا نشد."
-step_done 1 "محیط Termux آماده شد  (node $(node -v 2>/dev/null | tr -d '\n'))"
+command -v node >/dev/null 2>&1 || fail "node not found after installation."
+command -v npm  >/dev/null 2>&1 || fail "npm not found after installation."
+command -v git  >/dev/null 2>&1 || fail "git not found after installation."
+step_done 1 "Termux environment ready (node $(node -v 2>/dev/null | tr -d '\n'))"
 
-# ── 2/5 source ─────────────────────────────────────────────────────
-start_spinner "۲/۵  دریافت سورس از GitHub…"
+# Step 2: Clone repository
+start_spinner "Step 2/5  Cloning Terminux from GitHub..."
 mkdir -p "$(dirname "$INSTALL_DIR")"
 if [[ -d "$INSTALL_DIR/.git" ]]; then
   if ! run_quiet git -C "$INSTALL_DIR" fetch --depth 1 origin "$BRANCH"; then
-    fail "git fetch ناموفق بود. اتصال اینترنت یا دسترسی به GitHub را چک کن."
+    fail "git fetch failed. Please check your internet connection."
   fi
-  # reset to remote main to avoid ff-only failures on dirty trees
   run_quiet git -C "$INSTALL_DIR" checkout -f -B "$BRANCH" "origin/$BRANCH" \
     || run_quiet git -C "$INSTALL_DIR" pull --ff-only origin "$BRANCH" \
-    || fail "به‌روزرسانی مخزن محلی ناموفق بود."
+    || fail "Failed to update existing repository."
 else
   rm -rf "$INSTALL_DIR"
   run_quiet git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR" \
-    || fail "کلون مخزن ناموفق بود: $REPO_URL"
+    || fail "Failed to clone repository: $REPO_URL"
 fi
-[[ -f "$INSTALL_DIR/package.json" ]] || fail "package.json در $INSTALL_DIR پیدا نشد."
-[[ -f "$INSTALL_DIR/src/server.ts" ]] || fail "src/server.ts پیدا نشد — کلون ناقص است."
-step_done 2 "سورس دریافت شد"
+[[ -f "$INSTALL_DIR/package.json" ]] || fail "package.json not found in $INSTALL_DIR"
+[[ -f "$INSTALL_DIR/src/server.ts" ]] || fail "src/server.ts not found - clone may have failed."
+step_done 2 "Source code downloaded successfully"
 
-# ── 3/5 npm ────────────────────────────────────────────────────────
-start_spinner "۳/۵  نصب وابستگی‌های npm (ممکن است چند دقیقه طول بکشد)…"
-# prefer full install so tsx stays available; omit optional noise
+# Step 3: Install npm dependencies
+start_spinner "Step 3/5  Installing npm dependencies (this may take a while)..."
 if ! run_quiet npm install --prefix "$INSTALL_DIR" --no-audit --no-fund; then
-  # retry once clean
   rm -rf "$INSTALL_DIR/node_modules"
   run_quiet npm install --prefix "$INSTALL_DIR" --no-audit --no-fund \
-    || fail "npm install ناموفق بود."
+    || fail "npm install failed."
 fi
 if [[ ! -x "$INSTALL_DIR/node_modules/.bin/tsx" ]] && [[ ! -f "$INSTALL_DIR/node_modules/tsx/dist/cli.mjs" ]]; then
-  fail "tsx نصب نشد. npm install را دستی در $INSTALL_DIR بررسی کن."
+  fail "tsx not found. npm install may have failed in $INSTALL_DIR"
 fi
-step_done 3 "وابستگی‌ها نصب شدند"
+step_done 3 "Dependencies installed successfully"
 
-# ── 4/5 launcher ───────────────────────────────────────────────────
-start_spinner "۴/۵  ساخت میانبر terminux…"
-mkdir -p "$PREFIX_BIN" "$WORKSPACE_DIR" || fail "ساخت پوشه bin/workspace ناموفق بود."
+# Step 4: Create launcher script
+start_spinner "Step 4/5  Creating terminux launcher..."
+mkdir -p "$PREFIX_BIN" "$WORKSPACE_DIR" || fail "Failed to create bin/workspace directories."
 cat > "$PREFIX_BIN/terminux" <<EOF
 #!${TERMUX_BASH}
 # Terminux launcher
 export TERMINUX_WORKSPACE="${WORKSPACE_DIR}"
 cd "${INSTALL_DIR}" || exit 1
-# کد خروج ۷۵ = درخواست راه‌اندازی مجدد (ابزار restart_server / self_update)
 while true; do
   if [[ -x ./node_modules/.bin/tsx ]]; then ./node_modules/.bin/tsx src/server.ts; else npm start; fi
   code=\$?
   [[ \$code -eq 75 ]] || exit \$code
-  echo "↻ راه‌اندازی مجدد Terminux…"
+  echo "→ Restarting Terminux..."
   sleep 1
 done
 EOF
-chmod 700 "$PREFIX_BIN/terminux" || fail "chmod میانبر ناموفق بود."
+chmod 700 "$PREFIX_BIN/terminux" || fail "Failed to set permissions for terminux launcher."
 command -v terminux >/dev/null 2>&1 || export PATH="$PREFIX_BIN:$PATH"
-step_done 4 "میانبر «terminux» آماده شد"
+step_done 4 "terminux launcher created"
 
-# ── 5/5 workspace ──────────────────────────────────────────────────
-start_spinner "۵/۵  آماده‌سازی فضای کاری…"
+# Step 5: Setup workspace
+start_spinner "Step 5/5  Setting up workspace..."
 mkdir -p "$WORKSPACE_DIR" \
   "$HOME/.config/terminux" \
   "$INSTALL_DIR/workspace" 2>/dev/null || true
-# light touch so first boot is clean
 : >> "$WORKSPACE_DIR/.terminux_ready" 2>/dev/null || true
-step_done 5 "فضای کاری آماده شد"
+step_done 5 "Workspace ready"
 
-# ── done ───────────────────────────────────────────────────────────
+# Completion
 stop_spinner
-draw_bar 100 "تمام"
+draw_bar 100 "Complete"
 printf "\n\n"
-printf "  ${OK}${B}✓ نصب Terminux با موفقیت تمام شد${R}\n\n"
-printf "  ${D}پوشه برنامه${R}   ${W}%s${R}\n" "$INSTALL_DIR"
-printf "  ${D}فضای کاری${R}    ${W}%s${R}\n" "$WORKSPACE_DIR"
-printf "  ${D}اجرا${R}          ${O}${B}terminux${R}\n"
-printf "  ${D}نشانی وب${R}     ${C}http://127.0.0.1:3000${R}\n\n"
-printf "  ${D}────────────────────────────────────────────────────────${R}\n"
-printf "  ${O}▶${R}  در حال راه‌اندازی سرور…\n\n"
+printf "  ${OK}${B}✓ Terminux installed successfully!${R}\n\n"
+printf "  ${D}Install Dir:${R}   ${W}%s${R}\n" "$INSTALL_DIR"
+printf "  ${D}Workspace:${R}   ${W}%s${R}\n" "$WORKSPACE_DIR"
+printf "  ${D}Command:${R}     ${C}terminux${R}\n"
+printf "  ${D}Web UI:${R}      ${C}http://127.0.0.1:3000${R}\n\n"
+printf "  ${D}════════════════════════════════════════════════════════════${R}\n"
+printf "  ${O}→ Run ${B}terminux${R}${O} to start the AI agent!${R}\n"
+printf "  ${D}════════════════════════════════════════════════════════════${R}\n\n"
 
 export PATH="$PREFIX_BIN:$PATH"
 exec "$PREFIX_BIN/terminux"
