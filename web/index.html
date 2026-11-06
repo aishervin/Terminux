@@ -838,7 +838,7 @@ async function renderConnections(){mt.textContent='کانکشن‌ها';ml.repla
     row('سرورهای MCP',mcp.length?mcp.length+' سرور فعال':'تنظیم نشده',()=>{closeMenu();$('#openSettings').click();});
     row('مدل فعال',c.model||'—',null,true);
   }catch(err){ml.replaceChildren();row(err.message,'',null,true);}}
-function openMenu(k){if(cur===k)return closeMenu();cur=k;ml.replaceChildren();
+async function openMenu(k){if(cur===k)return closeMenu();cur=k;ml.replaceChildren();
   document.body.classList.add('menu-open');menu.classList.add('open');rail.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===k));
   if(P[k]){mt.textContent=P[k][0];
     P[k][1].forEach(([t,p])=>row(t,'',()=>fill(p)));}

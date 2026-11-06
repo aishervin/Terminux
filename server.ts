@@ -811,7 +811,7 @@ async function callModelWithTools(historyList: any[]): Promise<{ text?: string; 
         }};
       });
       const responses = parts.filter((p: any) => p?.functionResponse);
-      const content = parts.filter((p: any) => typeof p?.text === 'string').map((p: any) => p.text).join('\\n');
+      const content = parts.filter((p: any) => typeof p?.text === 'string').map((p: any) => p.text).join('\n');
       if (role === 'assistant') {
         if (calls.length) messages.push({ role: 'assistant', content: content || null, tool_calls: calls });
         else if (content || item.content) messages.push({ role: 'assistant', content: content || item.content });
@@ -1307,7 +1307,7 @@ app.get('/api/github/repo-tree', async (req: Request, res: Response) => {
     return res.status(401).json({ error: 'توکن GitHub در تنظیمات ثبت نشده است.' });
   }
   const { repo, branch, path: requestedPath } = req.query;
-  if (!repo || typeof repo !== 'string' || !/^[^/]+\\/[^/]+$/.test(repo)) {
+  if (!repo || typeof repo !== 'string' || !/^[^/]+\/[^/]+$/.test(repo)) {
     return res.status(400).json({ error: 'نام مخزن باید به شکل owner/repo باشد.' });
   }
   try {
@@ -1323,13 +1323,13 @@ app.get('/api/github/repo-tree', async (req: Request, res: Response) => {
       return res.status(response.status).json({ error: 'دریافت ساختار مخزن انجام نشد.' });
     }
     const data: any = await response.json();
-    const prefix = requestedPath ? String(requestedPath).replace(/^\\/+|\\/+$/g, '') + '/' : '';
+    const prefix = requestedPath ? String(requestedPath).replace(/^\/+|\/+$/g, '') + '/' : '';
     const entries = (data.tree || []).filter((entry: any) => {
       if (!entry.path?.startsWith(prefix)) return false;
       const rest = entry.path.slice(prefix.length);
       return rest.length > 0 && !rest.slice(0, -1).includes('/');
     }).slice(0, 200).map((entry: any) => ({
-      name: entry.path.slice(prefix.length).replace(/\\/$/, ''), path: entry.path,
+      name: entry.path.slice(prefix.length).replace(/\/$/, ''), path: entry.path,
       type: entry.type === 'tree' ? 'dir' : 'file', size: entry.size || 0
     }));
     res.json({ entries, tree: entries });
