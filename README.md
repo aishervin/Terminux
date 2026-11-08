@@ -1,98 +1,72 @@
-# Terminux
+# TΞRMINUX™
+
+<p align="center"><b>ایجنت کدنویسی OpenCode روی اندروید، با نصب خودکار محیط Linux در Termux</b></p>
 
 <p align="center">
-  <b>ایجنت کدنویسی محلی روی Termux — با رابط وب فارسی و تم اختصاصی</b>
+  <a href="https://github.com/aishervin/Terminux"><img alt="GitHub" src="https://img.shields.io/badge/GitHub-aishervin%2FTerminux-ff7a00?style=flat-square"></a>
+  <img alt="Runtime" src="https://img.shields.io/badge/runtime-Debian%20%2B%20proot-orange?style=flat-square">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-3ddc84?style=flat-square">
 </p>
 
-<p align="center">
-  <a href="https://github.com/aishervin/Terminux"><img alt="repo" src="https://img.shields.io/badge/github-aishervin%2FTerminux-ff7a00?style=flat-square"></a>
-  <img alt="opencode" src="https://img.shields.io/badge/opencode-2.2.6-111?style=flat-square">
-  <img alt="license" src="https://img.shields.io/badge/license-MIT-3ddc84?style=flat-square">
-</p>
+Terminux اجرای OpenCode را در یک محیط کامل Debian داخل Termux مدیریت می‌کند. این روش از اجرای مستقیم باینری Linux روی Android جلوگیری می‌کند و وابستگی‌های موردنیاز را خودش نصب می‌کند.
 
-Terminux یک **پوست (skin) برای رابط دسکتاپ OpenCode** است:
-تم رنگی، فونت فارسی، و ریزه‌کاری‌های ظاهری — بدون فورک کردن هسته. لانچر Termux از لینک Pairing برای باز کردن رابط وب استاندارد OpenCode استفاده می‌کند؛ پلاگین GUI فعلی روی رابط وب مرورگر اعمال نمی‌شود و فقط در OpenCode Desktop بارگذاری می‌شود.
+## نصب یک‌خطی
 
-مزیت این روش:
-
-- ✅ **همهٔ قابلیت‌های OpenCode Desktop** سر جایشان هستند (سشن، ابزارها، دیف، ترمینال، MCP، …)
-- ✅ با آپدیت‌های OpenCode نمی‌شکند
-- ✅ همهٔ برند در **یک فایل** است: [`skin/src/brand.ts`](skin/src/brand.ts)
-- ✅ نصب با یک دستور
-
----
-
-## نصب
+داخل Termux اجرا کن:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aishervin/Terminux/main/install.sh | bash
 ```
 
-نصب‌کننده ابتدا محیط Termux و اجرای OpenCode را بررسی می‌کند؛ سپس در صورت نیاز `curl` و `git` را نصب می‌کند، OpenCode را (اگر موجود نباشد) نصب می‌کند و وجود باندل GUI را قبل از تغییر سیستم اعتبارسنجی می‌کند. در پایان پلاگین GUI، تم و لانچر را در مسیرهای درست کپی می‌کند. اگر دانلود یا هر مرحلهٔ ضروری شکست بخورد، نصب متوقف می‌شود و پیام موفقیت کاذب نمایش داده نمی‌شود.
+نصب‌کننده معماری را بررسی می‌کند، ابزارهای لازم Termux را نصب می‌کند، Debian را با proot-distro آماده می‌کند، وابستگی‌های Linux را نصب می‌کند، OpenCode را در همان محیط نصب و اجراپذیری آن را بررسی می‌کند و در پایان لانچر Terminux را نصب می‌کند. اجرای دوبارهٔ نصب‌کننده برای ترمیم یا به‌روزرسانی امن طراحی شده است؛ داده‌ها و سشن‌های OpenCode حذف نمی‌شوند.
 
-بعد از نصب، هر بار فقط:
+سپس فقط بنویس:
 
 ```bash
 Terminux
 ```
 
-> تم برند (`Terminux Charcoal`) **خودکار** اعمال می‌شود؛ نیازی به انتخاب دستی نیست.
+لانچر سرویس را روی `127.0.0.1:4096` بالا می‌آورد، سلامت آن را بررسی می‌کند، لینک Pairing می‌سازد و مرورگر را باز می‌کند.
 
-### دستورها
+## دستورها
 
-| دستور | کار |
+| دستور | عملکرد |
 |---|---|
-| `Terminux` | سرور را بالا می‌آورد و UI را باز می‌کند |
-| `Terminux link` | لینک یک‌بارمصرف اتصال را می‌سازد و باز می‌کند |
-| `Terminux status` | وضعیت سرور و پوست |
-| `Terminux update` | به‌روزرسانی پلاگین، تم و لانچر از گیت‌هاب |
-| `Terminux stop` / `restart` | توقف / راه‌اندازی مجدد سرویس OpenCode |
-| `Terminux uninstall` | حذف پلاگین، تم و لانچر (OpenCode و سشن‌ها می‌مانند) |
+| `Terminux` | شروع سرویس و باز کردن مرورگر |
+| `Terminux status` | بررسی سلامت سرویس |
+| `Terminux restart` | راه‌اندازی مجدد |
+| `Terminux stop` | توقف سرویس |
+| `Terminux logs` | نمایش گزارش آخرین اجرا |
+| `Terminux update` | دریافت نسخهٔ جدید نصب‌کننده |
+| `Terminux uninstall` | حذف لانچر و پوستهٔ Terminux، بدون حذف Debian یا سشن‌ها |
 
-## ساختار
+گزارش‌ها در `~/.termunix/` ذخیره می‌شوند:
+- `install.log` گزارش نصب
+- `opencode.log` گزارش سرویس
 
-```
-Terminux/
-├─ install.sh              نصب‌کنندهٔ یک‌خطی و idempotent
-├─ bin/termunix            لانچر (Terminux هم به همین اشاره می‌کند)
-├─ skin/
-│  ├─ assets/shen_logo.png لوگوی خام
-│  ├─ scripts/embed-logo.mjs
-│  ├─ src/
-│  │  ├─ brand.ts          ← همهٔ برند اینجاست (نام، رنگ، لوگو، فونت، رفتار)
-│  │  ├─ theme.ts          ساخت تم از پالت brand
-│  │  ├─ styles.ts         تزریق CSS (فونت، RTL، اسکرول‌بار، نشان گوشه)
-│  │  ├─ logo.ts           لوگو به‌صورت base64 (خودکار ساخته می‌شود)
-│  │  └─ gui.ts            ورودی پلاگین GUI
-│  └─ dist/                باندل آماده (کامیت می‌شود تا نصب سریع باشد)
-└─ docs/
-   └─ customize.md         راهنمای شخصی‌سازی
-```
+## رابط و برند
 
-## شخصی‌سازی
+نام، لوگو، پالت مشکی/ذغالی و نارنجی، فونت فارسی و CSS پوسته در `skin/src/brand.ts` و فایل‌های مرتبط نگهداری می‌شوند.
 
-**لوگو:** `skin/assets/shen_logo.png` را جای‌گذاری کن.
+**محدودیت مهم و شفاف:** پلاگین فعلی `@opencode/plugin/gui` فقط در OpenCode Desktop بارگذاری می‌شود. رابطی که با Pairing در مرورگر باز می‌شود، فعلاً رابط استاندارد وب OpenCode است و از این پلاگین رنگ و لوگو نمی‌گیرد. این مخزن نباید این دو را به‌عنوان یک قابلیت انجام‌شده معرفی کند. شخصی‌سازی واقعی وب نیازمند پچ و ساخت فرانت‌اند وب OpenCode است.
 
-**رنگ/نام/رفتار:** `skin/src/brand.ts` را عوض کن.
+## امنیت و پایداری
 
-بعد فقط:
+- سرویس به‌صورت پیش‌فرض فقط روی `127.0.0.1` گوش می‌دهد.
+- هیچ پورت عمومی یا دسترسی شبکه‌ای بیرونی باز نمی‌شود.
+- حذف Terminux داده‌ها و سشن‌های OpenCode را پاک نمی‌کند.
+- محدودیت‌های مدیریت باتری اندروید ممکن است پردازش پس‌زمینه را متوقف کند؛ برای اجرای پایدارتر، محدودیت باتری Termux را در تنظیمات Android غیرفعال کن.
+
+## توسعه
+
+ساخت پلاگین GUI دسکتاپ:
 
 ```bash
 cd skin
-bun run brand             # لوگو + باندل را از نو می‌سازد
+bun install
+bun run brand
 ```
 
-سپس `skin/dist/gui-experimental.cjs` را در
-`~/.config/opencode/plugins/termunix/` بگذار (یا `Terminux update` بزن).
+امضای توسعه‌دهنده: [aishervin](https://github.com/aishervin) · [Telegram](https://t.me/shervini) · [X](https://x.com/shervinonx)
 
-جزئیات: [docs/customize.md](docs/customize.md)
-
-## حذف
-
-```bash
-Terminux uninstall
-```
-
-## مجوز
-
-MIT © aishervin
+MIT License.

@@ -1,59 +1,101 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# TΞRMINUX™ launcher
-set -uo pipefail
+# TΞRMINUX™ launcher — OpenCode runs in Debian proot, never as an Android ELF.
+set -Eeuo pipefail
 
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-export PATH="$HOME/.opencode/bin:$PREFIX/bin:$HOME/.local/bin:$PATH"
+DISTRO="debian"
+PORT="${TERMINUX_PORT:-4096}"
+LOG_DIR="$HOME/.termunix"
+LOG_FILE="$LOG_DIR/opencode.log"
+mkdir -p "$LOG_DIR"
+export PATH="$PREFIX/bin:$PATH"
 
-say() { printf '\033[38;5;208m>\033[0m %s\n' "$*"; }
-bad() { printf '\033[38;5;203mERR:\033[0m %s\n' "$*" >&2; }
-have_opencode() {
-  command -v opencode >/dev/null 2>&1 || { bad "OpenCode is not installed. Run the Terminux installer."; return 1; }
-  opencode --version >/dev/null 2>&1 || { bad "OpenCode cannot execute in this Termux environment."; return 1; }
+say(){ printf '\033[38;5;208m[Terminux]\033[0m %s\n' "$*"; }
+bad(){ printf '\033[38;5;203m[Terminux ERROR]\033[0m %s\n' "$*" >&2; }
+need(){
+  command -v proot-distro >/dev/null 2>&1 || { bad "Debian runtime missing. Re-run the Terminux installer."; exit 1; }
+  proot-distro list 2>/dev/null | grep -Eq '(^|[[:space:]])debian([[:space:]]|$)' || { bad "Debian is not installed. Re-run the installer."; exit 1; }
 }
+linux(){ proot-distro login "$DISTRO" --shared-tmp -- "$@"; }
+oc(){ linux bash -lc 'export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"; exec opencode "$@"' _ "$@"; }
 
-open_link() {
-  local link
-  have_opencode || return 1
-  if ! opencode service status >/dev/null 2>&1; then
-    say "Starting OpenCode background service..."
-    opencode service start || { bad "Could not start OpenCode service."; return 1; }
-  fi
-
-  say "Generating one-time sign-in link..."
-  link="$(opencode pair 2>&1 | grep -Eo 'https?://[^[:space:]]+/auth/connect/[A-Za-z0-9_-]+' | head -n 1 | tr -d '\r')"
-  [ -n "$link" ] || { bad "No pairing URL returned. Check: opencode service status"; return 1; }
-
-  say "Opening Terminux..."
-  if command -v termux-open-url >/dev/null 2>&1; then
-    termux-open-url "$link" || { printf "Open manually: %s\n" "$link"; return 1; }
-  elif command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "$link" || { printf "Open manually: %s\n" "$link"; return 1; }
+health(){
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS --max-time 2 "http://127.0.0.1:$PORT/global/health" >/dev/null 2>&1
   else
-    printf "Open this link manually (valid for 5 minutes):\n%s\n" "$link"
+    return 1
   fi
 }
 
+start_service(){
+  if health; then return 0; fi
+  say "Starting the local OpenCode service on 127.0.0.1:$PORT ..."
+  oc service start >>"$LOG_FILE" 2>&1 || {
+    # Some OpenCode releases expose serve directly rather than the service manager.
+    (nohup proot-distro login "$DISTRO" --shared-tmp -- bash -lc 'export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"; exec opencode serve --hostname 127.0.0.1 --port '"$PORT" >>"$LOG_FILE" 2>&1 </dev/null &)
+  }
+  for _ in $(seq 1 25); do
+    health && { say "Service is ready."; return 0; }
+    sleep 1
+  done
+  bad "OpenCode did not become healthy. Log: $LOG_FILE"
+  return 1
+}
+
+need
 case "${1:-connect}" in
-  connect|run|start|link) open_link ;;
-  status) have_opencode && opencode service status ;;
-  stop) have_opencode && opencode service stop ;;
-  restart) have_opencode && opencode service restart ;;
+  connect|run|start|link)
+    command -v curl >/dev/null 2>&1 || { bad "curl missing; run the installer."; exit 1; }
+    start_service
+    say "Creating a secure pairing link..."
+    PAIR_OUTPUT="$(oc pair 2>&1 || true)"
+    LINK="$(printf '%s\n' "$PAIR_OUTPUT" | grep -Eo 'https?://[^[:space:]]+/auth/connect/[A-Za-z0-9_-]+' | head -n 1 | tr -d '\r' || true)"
+    if [ -z "$LINK" ]; then
+      printf '%s\n' "$PAIR_OUTPUT"
+      bad "Pairing URL not detected. Check $LOG_FILE"
+      exit 1
+    fi
+    say "Opening Terminux in your browser..."
+    if command -v termux-open-url >/dev/null 2>&1; then
+      termux-open-url "$LINK" || { printf 'Open manually: %s\n' "$LINK"; exit 1; }
+    else
+      printf 'Open this link manually:\n%s\n' "$LINK"
+    fi
+    ;;
+  status)
+    need
+    if health; then
+      say "OpenCode is healthy at http://127.0.0.1:$PORT"
+    else
+      say "OpenCode is stopped or not responding."
+      exit 1
+    fi
+    ;;
+  stop)
+    need
+    oc service stop || true
+    pkill -f "opencode serve --hostname 127.0.0.1 --port $PORT" 2>/dev/null || true
+    say "Stop requested."
+    ;;
+  restart)
+    "$0" stop || true
+    "$0" start
+    ;;
+  logs)
+    tail -n 100 "$LOG_FILE"
+    ;;
   update)
-    say "Updating Terminux from GitHub..."
     curl -fsSL https://raw.githubusercontent.com/aishervin/Terminux/main/install.sh | bash
     ;;
   uninstall)
-    say "Removing Terminux plugin and launcher; OpenCode sessions are preserved..."
+    say "Removing Terminux files only; Debian and OpenCode data/sessions are preserved."
     rm -rf "$HOME/.config/opencode/plugins/termunix"
     rm -f "$HOME/.config/opencode/themes/terminux-charcoal.json"
     rm -f "$PREFIX/bin/termunix" "$PREFIX/bin/Terminux"
-    rm -f "$HOME/.local/bin/termunix" "$HOME/.local/bin/Terminux"
-    say "Terminux removed. OpenCode and its sessions were not deleted."
+    say "Terminux launcher and skin removed. Runtime and sessions were not deleted."
     ;;
   *)
-    bad "Unknown command: $1"
-    printf "Usage: Terminux [connect|link|status|restart|stop|update|uninstall]\n"
+    bad "Usage: Terminux [connect|link|status|restart|stop|logs|update|uninstall]"
     exit 2
     ;;
 esac
