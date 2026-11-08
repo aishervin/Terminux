@@ -3,6 +3,7 @@
 set -uo pipefail
 
 O=$'\033[38;5;208m'; G=$'\033[38;5;114m'; W=$'\033[37m'; R=$'\033[0m'; D=$'\033[90m'
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 
 progress() {
   local p=$1; local label=$2; local w=30
@@ -24,14 +25,13 @@ BANNER
 
 printf "\n\n"
 progress 0 "Checking environment..."
-case "$PREFIX" in
-  *com.termux*) ;;
-  *) echo -e "\n\033[31mError: This installer is designed for Termux only.\033[0m"; exit 1 ;;
-esac
+# Fallback friendly for both Termux and Linux/Proot
+mkdir -p "$PREFIX/bin" 2>/dev/null || PREFIX="$HOME/.local"
+mkdir -p "$PREFIX/bin"
 
 progress 20 "Installing system dependencies..."
-pkg update -y >/dev/null 2>&1 || true
-pkg install -y curl git nodejs-lts termux-tools dpkg >/dev/null 2>&1
+pkg update -y >/dev/null 2>&1 || apt-get update -y >/dev/null 2>&1 || true
+pkg install -y curl git nodejs-lts termux-tools dpkg >/dev/null 2>&1 || apt-get install -y curl git nodejs termux-tools dpkg >/dev/null 2>&1 || true
 
 progress 40 "Verifying OpenCode runtime..."
 if ! command -v opencode >/dev/null 2>&1; then
@@ -50,9 +50,9 @@ cat > "$PLUGIN_DIR/package.json" <<'JSON'
 {"name":"opencode-termunix-skin","version":"0.2.0","type":"module","exports":{"./gui-experimental":"./gui-experimental.cjs"}}
 JSON
 
-cp "$TMP_DIR/src/bin/termunix" "$PREFIX/bin/termunix"
-chmod +x "$PREFIX/bin/termunix"
-ln -sf "$PREFIX/bin/termunix" "$PREFIX/bin/Terminux"
+cp "$TMP_DIR/src/bin/termunix" "$PREFIX/bin/termunix" 2>/dev/null || cp "$TMP_DIR/src/bin/termunix" "$HOME/.local/bin/termunix"
+chmod +x "$PREFIX/bin/termunix" 2>/dev/null || chmod +x "$HOME/.local/bin/termunix"
+ln -sf "$PREFIX/bin/termunix" "$PREFIX/bin/Terminux" 2>/dev/null || ln -sf "$HOME/.local/bin/termunix" "$HOME/.local/bin/Terminux"
 
 rm -rf "$TMP_DIR"
 progress 100 "Installation complete!"
