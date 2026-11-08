@@ -99,6 +99,7 @@ var brand = {
       diffDelete: "#cf222e"
     }
   },
+  applyByDefault: true,
   style: {
     topLine: true,
     glow: true,
@@ -313,6 +314,26 @@ function buildTheme(b = brand) {
 }
 
 // src/gui.ts
+var THEME_KEY = "opencode-theme-id";
+var INIT_FLAG = "termunix.theme.initialized";
+function applyDefaultTheme(pluginId) {
+  try {
+    if (!brand.applyByDefault)
+      return;
+    if (localStorage.getItem(INIT_FLAG))
+      return;
+    localStorage.setItem(INIT_FLAG, "1");
+    const want = `${pluginId}:${brand.themeId}`;
+    if (localStorage.getItem(THEME_KEY) === want)
+      return;
+    localStorage.setItem(THEME_KEY, want);
+    setTimeout(() => {
+      try {
+        location.reload();
+      } catch {}
+    }, 600);
+  } catch {}
+}
 var gui_default = import_gui.Plugin.define({
   i18n: {
     en: {
@@ -329,5 +350,9 @@ var gui_default = import_gui.Plugin.define({
   setup(ctx) {
     ctx.add(import_gui.Theme, buildTheme());
     ctx.add(import_gui.Style, buildCss());
+    applyDefaultTheme(ctx.id);
+    try {
+      document.title = `${brand.name} — OpenCode`;
+    } catch {}
   }
 });
