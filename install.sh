@@ -186,6 +186,18 @@ case "${1:-open}" in
     proot-distro login "$distro" -- bash -c 'export PATH="$HOME/.opencode/bin:$PATH"; opencode --version; opencode service status' || true
     exit 0
     ;;
+  uninstall)
+    echo "Removing TΞRMINUX (sessions and OpenCode data are kept)..."
+    proot-distro login "$distro" -- bash -c '
+      export PATH="$HOME/.opencode/bin:$PATH"
+      opencode service stop >/dev/null 2>&1 || true
+      rm -rf "$HOME/Terminux" "$HOME/.config/opencode/plugins/termunix"
+    ' || true
+    BIN_DIR="$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")"
+    rm -f "$BIN_DIR/termunix" "$BIN_DIR/Terminux"
+    echo "Removed. The Ubuntu container is kept; remove it with: proot-distro remove ubuntu"
+    exit 0
+    ;;
 esac
 
 out="$(inner)"

@@ -89,6 +89,7 @@ Terminux update
 | `Terminux status` | نسخه و وضعیت سرویس |
 | `Terminux update` | دریافت آخرین تغییرات مخزن و اسکیل‌ها |
 | `Terminux stop` | توقف سرویس |
+| `Terminux uninstall` | حذف لانچر و پوسته (سشن‌ها می‌مانند) |
 | `termunix` | نام جایگزین، همان کار |
 
 ---
