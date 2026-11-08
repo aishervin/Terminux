@@ -14,11 +14,17 @@ const INIT_FLAG = "termunix.theme.initialized"
 function applyDefaultTheme(pluginId: string) {
   try {
     if (!brand.applyByDefault) return
-    if (localStorage.getItem(INIT_FLAG)) return
-    localStorage.setItem(INIT_FLAG, "1")
 
     const want = `${pluginId}:${brand.themeId}`
-    if (localStorage.getItem(THEME_KEY) === want) return
+    const stored = localStorage.getItem(THEME_KEY)
+    const initialized = localStorage.getItem(INIT_FLAG) === "1"
+    const mine = !!stored && stored.startsWith(`${pluginId}:`)
+
+    localStorage.setItem(INIT_FLAG, "1")
+
+    // اگر کاربر تم دیگری انتخاب کرده، دست نزن
+    if (initialized && !mine) return
+    if (stored === want) return
 
     localStorage.setItem(THEME_KEY, want)
     // یک‌بار رفرش تا اسکریپت preload تم را از اول بخواند
