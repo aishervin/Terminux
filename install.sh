@@ -24,7 +24,7 @@ cat <<'BANNER'
      ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║╚██████╔╝██╔╝ ██╗
      ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝
 
-     TΞRMINUX™ — GitHub Connected Edition
+     TΞRMINUX™ — FULL TUNED OPENCODE FOR ANDROID BY : SHΞN™ 
 BANNER
 
 # ── 1. Termux base ──────────────────────────────────────────
