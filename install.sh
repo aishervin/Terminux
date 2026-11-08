@@ -43,8 +43,19 @@ if proot-distro login ubuntu -- true >/dev/null 2>&1; then
   ok "Ubuntu container already installed."
 else
   printf "  %s-> downloading Ubuntu (one time, ~120 MB)...%s\n" "$D" "$R"
-  proot-distro install ubuntu || die "Ubuntu installation failed"
-  proot-distro login ubuntu -- true >/dev/null 2>&1 || die "Ubuntu container is not usable"
+  if ! proot-distro install ubuntu; then
+    # Install may have been cut off (sleep / network). The container is not
+    # usable (login failed above), so it is safe to remove it and retry once.
+    warn "Ubuntu install failed - cleaning up and retrying once"
+    proot-distro remove ubuntu >/dev/null 2>&1 || true
+    proot-distro install ubuntu || die "Ubuntu installation failed (check internet / storage and run again)"
+  fi
+  if ! proot-distro login ubuntu -- true >/dev/null 2>&1; then
+    warn "Ubuntu container is broken - reinstalling"
+    proot-distro remove ubuntu >/dev/null 2>&1 || true
+    proot-distro install ubuntu || die "Ubuntu installation failed"
+    proot-distro login ubuntu -- true >/dev/null 2>&1 || die "Ubuntu container is not usable"
+  fi
   ok "Ubuntu installed."
 fi
 
@@ -135,7 +146,13 @@ chmod +x "$HOME/.terminux-apply.sh"
 # --- base packages ---
 apt-get update -y >>"$LOG" 2>&1 || true
 apt-get install -y curl git ca-certificates nodejs npm >>"$LOG" 2>&1 || true
+if ! command -v git >/dev/null 2>&1 || ! command -v node >/dev/null 2>&1; then
+  # one retry: refresh package lists and install again
+  apt-get update -y >>"$LOG" 2>&1 || true
+  apt-get install -y curl git ca-certificates nodejs npm >>"$LOG" 2>&1 || true
+fi
 command -v git >/dev/null 2>&1 || { echo "ERR: git is not installed in Ubuntu"; exit 2; }
+command -v node >/dev/null 2>&1 || { echo "ERR: nodejs is not installed in Ubuntu"; exit 4; }
 
 # --- repo + config ---
 bash "$HOME/.terminux-apply.sh" || exit 1
@@ -160,6 +177,7 @@ case "$rc" in
   1) die "could not download the repo ($REPO). Check your internet and run again." ;;
   2) die "git could not be installed inside Ubuntu." ;;
   3) die "OpenCode installation failed. See log: proot-distro login ubuntu -- cat /tmp/terminux-install.log" ;;
+  4) die "nodejs could not be installed inside Ubuntu (skills/theme need it). See log: proot-distro login ubuntu -- cat /tmp/terminux-install.log" ;;
   *) die "setup inside Ubuntu failed (code $rc)." ;;
 esac
 
@@ -186,9 +204,8 @@ if [ -x "$HOME/.terminux-apply.sh" ]; then
 else
   echo "Updater not found. Re-run the installer."
 fi
-opencode service restart >/dev/null 2>&1 || true
 UPD
-    echo "Done. Refresh the browser tab."
+    echo "Files updated. If TΞRMINUX is running: press Ctrl+C there, then run Terminux again."
     exit 0
     ;;
   stop)
