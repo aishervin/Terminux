@@ -1,72 +1,157 @@
 # TΞRMINUX™
 
-<p align="center"><b>ایجنت کدنویسی OpenCode روی اندروید، با نصب خودکار محیط Linux در Termux</b></p>
-
 <p align="center">
-  <a href="https://github.com/aishervin/Terminux"><img alt="GitHub" src="https://img.shields.io/badge/GitHub-aishervin%2FTerminux-ff7a00?style=flat-square"></a>
-  <img alt="Runtime" src="https://img.shields.io/badge/runtime-Debian%20%2B%20proot-orange?style=flat-square">
-  <img alt="License" src="https://img.shields.io/badge/license-MIT-3ddc84?style=flat-square">
+  <b>ایجنت کدنویسی OpenCode، روی موبایل — بدون دردسر، بدون باگ، با بهینه‌سازی اختصاصی</b><br>
+  <sub>بی‌نقص‌ترین مخزن برای آداپته‌کردن ایجنت روی اندروید</sub>
 </p>
 
-Terminux اجرای OpenCode را در یک محیط کامل Debian داخل Termux مدیریت می‌کند. این روش از اجرای مستقیم باینری Linux روی Android جلوگیری می‌کند و وابستگی‌های موردنیاز را خودش نصب می‌کند.
+<p align="center">
+  <a href="https://github.com/aishervin/Terminux/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/aishervin/Terminux?style=for-the-badge&color=ff7a00"></a>
+  <a href="https://github.com/aishervin/Terminux/commits/main"><img alt="last commit" src="https://img.shields.io/github/last-commit/aishervin/Terminux?style=for-the-badge&color=0d0d0f"></a>
+  <img alt="android" src="https://img.shields.io/badge/Android-Termux-3ddc84?style=for-the-badge">
+  <img alt="engine" src="https://img.shields.io/badge/engine-Ubuntu%20%2B%20proot-ff7a00?style=for-the-badge">
+</p>
 
-## نصب یک‌خطی
+---
 
-داخل Termux اجرا کن:
+## ⚡ در یک خط
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aishervin/Terminux/main/install.sh | bash
 ```
 
-نصب‌کننده معماری را بررسی می‌کند، ابزارهای لازم Termux را نصب می‌کند، Debian را با proot-distro آماده می‌کند، وابستگی‌های Linux را نصب می‌کند، OpenCode را در همان محیط نصب و اجراپذیری آن را بررسی می‌کند و در پایان لانچر Terminux را نصب می‌کند. اجرای دوبارهٔ نصب‌کننده برای ترمیم یا به‌روزرسانی امن طراحی شده است؛ داده‌ها و سشن‌های OpenCode حذف نمی‌شوند.
-
-سپس فقط بنویس:
+بعد فقط بنویس:
 
 ```bash
 Terminux
 ```
 
-لانچر سرویس را روی `127.0.0.1:4096` بالا می‌آورد، سلامت آن را بررسی می‌کند، لینک Pairing می‌سازد و مرورگر را باز می‌کند.
+همین. مرورگر باز می‌شود و ایجنت آماده است.
 
-## دستورها
+---
 
-| دستور | عملکرد |
-|---|---|
-| `Terminux` | شروع سرویس و باز کردن مرورگر |
-| `Terminux status` | بررسی سلامت سرویس |
-| `Terminux restart` | راه‌اندازی مجدد |
-| `Terminux stop` | توقف سرویس |
-| `Terminux logs` | نمایش گزارش آخرین اجرا |
-| `Terminux update` | دریافت نسخهٔ جدید نصب‌کننده |
-| `Terminux uninstall` | حذف لانچر و پوستهٔ Terminux، بدون حذف Debian یا سشن‌ها |
+## 🧠 چرا این مخزن؟
 
-گزارش‌ها در `~/.termunix/` ذخیره می‌شوند:
-- `install.log` گزارش نصب
-- `opencode.log` گزارش سرویس
+اجرای مستقیم باینری‌های Linux روی اندروید همیشه می‌شکند: `bionic` اندروید جای `glibc` لینوکس است، مسیرها فرق دارند و هر آپدیت یکی از این‌ها را می‌ترکاند.
 
-## رابط و برند
+TΞRMINUX™ این زنجیره را یک‌بار برای همیشه حل می‌کند:
 
-نام، لوگو، پالت مشکی/ذغالی و نارنجی، فونت فارسی و CSS پوسته در `skin/src/brand.ts` و فایل‌های مرتبط نگهداری می‌شوند.
+| مشکل رایج | راه‌حل ما |
+| --- | --- |
+| باینری OpenCode روی اندروید اجرا نمی‌شود | یک **Ubuntu کامل** با `proot-distro` داخل Termux |
+| وابستگی‌های ناقص (`curl`, `git`, `node`, …) | تشخیص و نصب خودکار، فقط چیزهای غایب |
+| سرویس بالا نمی‌آید | بررسی سلامت + تلاش مجدد + گزارش قابل خواندن |
+| لینک اتصال پیدا نمی‌شود | ساخت خودکار Pairing و باز کردن مرورگر |
+| نصب دستی و چند مرحله‌ای | یک دستور، از صفر تا صد |
+| شکستن نصب قبلی | نصب تکرارپذیر (idempotent)؛ سشن‌ها و داده‌ها دست‌نخورده |
 
-**محدودیت مهم و شفاف:** پلاگین فعلی `@opencode/plugin/gui` فقط در OpenCode Desktop بارگذاری می‌شود. رابطی که با Pairing در مرورگر باز می‌شود، فعلاً رابط استاندارد وب OpenCode است و از این پلاگین رنگ و لوگو نمی‌گیرد. این مخزن نباید این دو را به‌عنوان یک قابلیت انجام‌شده معرفی کند. شخصی‌سازی واقعی وب نیازمند پچ و ساخت فرانت‌اند وب OpenCode است.
+---
 
-## امنیت و پایداری
+## ✨ قابلیت‌ها
 
-- سرویس به‌صورت پیش‌فرض فقط روی `127.0.0.1` گوش می‌دهد.
-- هیچ پورت عمومی یا دسترسی شبکه‌ای بیرونی باز نمی‌شود.
-- حذف Terminux داده‌ها و سشن‌های OpenCode را پاک نمی‌کند.
-- محدودیت‌های مدیریت باتری اندروید ممکن است پردازش پس‌زمینه را متوقف کند؛ برای اجرای پایدارتر، محدودیت باتری Termux را در تنظیمات Android غیرفعال کن.
+- 🟠 **نصب صفر تا صد** — Termux خام هم کافی است
+- 🐧 **محیط لینوکس واقعی** — Ubuntu پایدار، نه هکِ باینری
+- 🚀 **لانچر هوشمند** — سرویس را می‌سازد، چک می‌کند، مرورگر را باز می‌کند
+- 🔄 **به‌روزرسانی زنده** — `Terminux update` همیشه آخرین نسخه را می‌کشد
+- 🧩 **اسکیل‌های مخزن** — هر مهارتی اینجا اضافه کنی، برای همهٔ کاربران فعال می‌شود
+- 📱 **بهینهٔ موبایل** — رابط وب OpenCode، بدون ترمینال تنگ و فونت شکسته
+- 🔒 **فقط localhost** — هیچ پورت عمومی باز نمی‌شود
+- 🎨 **برند اختصاصی** — هویت TΞRMINUX™ در نصب و محیط
 
-## توسعه
+---
 
-ساخت پلاگین GUI دسکتاپ:
+## 🧩 اسکیل‌های آماده
 
-```bash
-cd skin
-bun install
-bun run brand
+این مخزن فقط نصب‌کننده نیست؛ **مغز** هم می‌دهد:
+
+```
+skills/
+├─ android-github-actions-build/   ساخت، امضا و انتشار APK با GitHub Actions
+└─ termunix-guide/                نقشهٔ محیط برای خود ایجنت
 ```
 
-امضای توسعه‌دهنده: [aishervin](https://github.com/aishervin) · [Telegram](https://t.me/shervini) · [X](https://x.com/shervinonx)
+اسکیل اندروید شامل قرارداد کلید امضای دائمی، سکرت‌های استاندارد،
+`versionCode`، وریفای امضا و دو ورک‌فلوی آمادهٔ کپی است.
 
-MIT License.
+بعد از هر پوش، کاربران با یک دستور همه را می‌گیرند:
+
+```bash
+Terminux update
+```
+
+---
+
+## 🕹 دستورها
+
+| دستور | کار |
+| --- | --- |
+| `Terminux` | سرویس را بالا می‌آورد و UI را باز می‌کند |
+| `Terminux status` | نسخه و وضعیت سرویس |
+| `Terminux update` | دریافت آخرین تغییرات مخزن و اسکیل‌ها |
+| `Terminux stop` | توقف سرویس |
+| `termunix` | نام جایگزین، همان کار |
+
+---
+
+## 📋 پیش‌نیازها
+
+- Termux نسخهٔ **F-Droid** یا GitHub (نسخهٔ Play Store قدیمی است و کار نمی‌کند)
+- دستگاه **aarch64**
+- اینترنت برای نصب اولیه
+- حدود **۵۰۰ مگابایت** فضای آزاد
+- اندروید ۹ به بالا
+
+---
+
+## 🔍 چطور کار می‌کند
+
+```
+Termux
+ └── proot-distro: Ubuntu
+      ├── OpenCode (نصب رسمی)
+      ├── این مخزن  →  ~/Terminux
+      │    └── skills/  →  opencode.json
+      └── سرویس روی 127.0.0.1:49374
+             └── مرورگر اندروید (Pairing)
+```
+
+نصب‌کننده اگر Ubuntu را ببیند دوباره نصبش نمی‌کند، اگر OpenCode را ببیند
+دوباره دانلود نمی‌کند، و اگر نصب نیمه‌کاره بماند خودش ترمیمش می‌کند.
+
+---
+
+## 🛠 عیب‌یابی سریع
+
+| نشانه | کار |
+| --- | --- |
+| مرورگر باز نشد | `Terminux` را دوباره بزن؛ لینک را دستی باز کن |
+| سرویس بالا نیامد | `Terminux stop` بعد `Terminux` |
+| بعد از آپدیت چیزی عوض نشد | تب مرورگر را کامل ببند و از لینک جدید باز کن |
+| قطع شدن در پس‌زمینه | محدودیت باتری Termux را در تنظیمات اندروید بردار |
+
+---
+
+## 🔐 امنیت
+
+- سرویس فقط روی `127.0.0.1` گوش می‌دهد
+- احراز هویت با لینک Pairing یک‌بارمصرف
+- حذف Terminux سشن‌ها و تنظیمات OpenCode را پاک نمی‌کند
+- هیچ کلید یا رمزی داخل مخزن نگه‌داری نمی‌شود
+
+---
+
+## 🗑 حذف
+
+```bash
+Terminux stop
+proot-distro remove ubuntu
+rm -f "$PREFIX/bin/termunix" "$PREFIX/bin/Terminux"
+```
+
+---
+
+## 📄 مجوز
+
+MIT © aishervin
+
+<p align="center"><sub>TΞRMINUX™ — ساخته‌شده برای اینکه ایجنت، روی گوشیِ خودت باشد.</sub></p>

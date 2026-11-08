@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 DISTRO="debian"
-PORT="${TERMINUX_PORT:-4096}"
+PORT="${TERMINUX_PORT:-49374}"
 LOG_DIR="$HOME/.termunix"
 LOG_FILE="$LOG_DIR/opencode.log"
 mkdir -p "$LOG_DIR"
