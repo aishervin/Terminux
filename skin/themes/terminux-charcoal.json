@@ -1,0 +1,23 @@
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "name": "Terminux Charcoal",
+  "defs": {
+    "neutral": "#0d0d0f",
+    "ink": "#ececed",
+    "primary": "#ff7a00",
+    "accent": "#ffa64d",
+    "success": "#3ddc84",
+    "warning": "#ffb020",
+    "error": "#ff4d6d",
+    "info": "#8b8b95"
+  },
+  "theme": {
+    "background": { "dark": "neutral", "light": "#f4f4f5" },
+    "text": { "dark": "ink", "light": "#17171a" },
+    "primary": { "dark": "primary", "light": "#e86a00" },
+    "accent": { "dark": "accent", "light": "#8a4a10" },
+    "success": { "dark": "success", "light": "#127a3c" },
+    "warning": { "dark": "warning", "light": "#9a6200" },
+    "error": { "dark": "error", "light": "#c4213f" }
+  }
+}
