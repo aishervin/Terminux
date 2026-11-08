@@ -17,11 +17,11 @@ cat << 'BANNER'
      ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║╚██████╔╝██╔╝ ██╗
      ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝
      
-     TΞRMINUX™ — Zero-to-Hero Ubuntu Engine for Termux
+     TΞRMINUX™ — Zero-to-Hero Ubuntu Engine on SHΞN™ Strategy 
 BANNER
 
 print_step "1/5: Checking Termux base packages..."
-pkg update -y >/dev/null 2>&1 || true
+pkg update -y >/dev/null 2>1 || true
 pkg install -y proot-distro curl git termux-tools >/dev/null 2>&1
 
 print_step "2/5: Setting up Ubuntu Linux container (Proot)..."
