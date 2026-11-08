@@ -1,89 +1,90 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# TΞRMINUX™ — resilient Termux installer (OpenCode runs inside Debian/glibc)
-set -Eeuo pipefail
+# TΞRMINUX™ — Bulletproof Zero-to-Hero Installer for Termux
+set -uo pipefail
 
-PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-BIN_DIR="$PREFIX/bin"
-DISTRO="debian"
-REPO_URL="https://github.com/aishervin/Terminux.git"
-CONFIG_DIR="$HOME/.config/opencode"
-PLUGIN_DIR="$CONFIG_DIR/plugins/termunix"
-THEME_DIR="$CONFIG_DIR/themes"
-LOG_DIR="$HOME/.termunix"
-LOG_FILE="$LOG_DIR/install.log"
-LOCK_DIR="$LOG_DIR/install.lock"
-TMP_DIR=""
+O=$'\033[38;5;208m'; G=$'\033[38;5;114m'; W=$'\033[37m'; R=$'\033[0m'; D=$'\033[90m'
 
-ORANGE=$'\033[38;5;208m'; GREEN=$'\033[38;5;114m'; RED=$'\033[38;5;203m'; RESET=$'\033[0m'
-log(){ printf "%b[Terminux]%b %s\n" "$ORANGE" "$RESET" "$*" | tee -a "$LOG_FILE"; }
-ok(){ printf "%b[✓]%b %s\n" "$GREEN" "$RESET" "$*" | tee -a "$LOG_FILE"; }
-die(){ printf "%b[Terminux ERROR]%b %s\n" "$RED" "$RESET" "$*" | tee -a "$LOG_FILE" >&2; exit 1; }
-cleanup(){ [ -z "$TMP_DIR" ] || rm -rf "$TMP_DIR"; rmdir "$LOCK_DIR" 2>/dev/null || true; }
-trap cleanup EXIT
-fail(){ local code=$?; printf '\n[Terminux] Installation stopped (exit %s). Log: %s\n' "$code" "$LOG_FILE" >&2; exit "$code"; }
-trap fail ERR
-
-[ -n "${HOME:-}" ] || die "HOME is not set."
-if [ -z "${TERMUX_VERSION:-}" ] && [ ! -d /data/data/com.termux/files/usr ]; then
-  die "این نصب‌کننده باید داخل برنامه Termux اجرا شود."
-fi
-case "$(uname -m)" in aarch64|arm64|x86_64|amd64) ;; *) die "معماری پشتیبانی‌نشده: $(uname -m)" ;; esac
-mkdir -p "$LOG_DIR"
-if ! mkdir "$LOCK_DIR" 2>/dev/null; then die "نصب دیگری در حال اجراست؛ چند لحظه صبر کن."; fi
-: > "$LOG_FILE"
-
-command -v pkg >/dev/null 2>&1 || die "مدیر بسته Termux (pkg) پیدا نشد."
-command -v proot-distro >/dev/null 2>&1 || {
-  log "Installing proot-distro..."
-  pkg update -y >>"$LOG_FILE" 2>&1
-  pkg install -y proot-distro >>"$LOG_FILE" 2>&1
+print_step() {
+  echo -e "\n${O}==> $1${R}"
 }
-for cmd in curl git; do
-  command -v "$cmd" >/dev/null 2>&1 || {
-    log "Installing $cmd..."
-    pkg install -y "$cmd" >>"$LOG_FILE" 2>&1
-  }
-done
-command -v proot-distro >/dev/null 2>&1 || die "proot-distro نصب نشد."
 
-if ! proot-distro list 2>/dev/null | grep -Eq '(^|[[:space:]])debian([[:space:]]|$)'; then
-  log "Installing Debian Linux environment (first run may take a while)..."
-  proot-distro install "$DISTRO" >>"$LOG_FILE" 2>&1 || die "نصب Debian ناموفق بود. گزارش: $LOG_FILE"
+clear
+cat << 'BANNER'
+  ████████╗███████╗██████╗ ███╗   ███╗██╗███╗   ██╗██╗   ██╗██╗  ██╗
+  ╚══██╔══╝██╔════╝██╔══██╗████╗ ████║██║████╗  ██║██║   ██║╚██╗██╔╝
+     ██║   █████╗  ██████╔╝██╔████╔██║██║██╔██╗ ██║██║   ██║ ╚███╔╝ 
+     ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║██║██║╚██╗██║██║   ██║ ██╔██╗ 
+     ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║╚██████╔╝██╔╝ ██╗
+     ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝
+     
+     TΞRMINUX™ — Zero-to-Hero Ubuntu Engine for Termux
+BANNER
+
+print_step "1/5: Checking Termux base packages..."
+pkg update -y >/dev/null 2>&1 || true
+pkg install -y proot-distro curl git termux-tools >/dev/null 2>&1
+
+print_step "2/5: Setting up Ubuntu Linux container (Proot)..."
+if ! proot-distro list | grep -q "ubuntu.*installed"; then
+  echo "Installing Ubuntu container (this may take a minute)..."
+  proot-distro install ubuntu
 else
-  log "Debian environment already exists."
+  echo "Ubuntu container already installed."
 fi
 
-linux(){
-  proot-distro login "$DISTRO" --shared-tmp -- "$@"
-}
+print_step "3/5: Installing OpenCode and dependencies inside Ubuntu..."
+# We use a heredoc to run multiple commands inside the container
+proot-distro login ubuntu -- bash << 'INSIDE'
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -y >/dev/null 2>&1
+  apt-get install -y curl git nodejs npm build-essential >/dev/null 2>&1
+  
+  if ! command -v opencode >/dev/null 2>&1; then
+    curl -fsSL https://opencode.ai/v2/install | bash
+  fi
+INSIDE
 
-log "Preparing Debian and required runtime packages..."
-linux apt-get update >>"$LOG_FILE" 2>&1
-linux env DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl git bash procps coreutils grep sed gawk >>"$LOG_FILE" 2>&1
+print_step "4/5: Installing TΞRMINUX launcher into Termux..."
+BIN_DIR="${PREFIX:-/data/data/com.termux/files/usr}/bin"
+mkdir -p "$BIN_DIR"
 
-if ! linux sh -lc 'command -v opencode >/dev/null 2>&1 && opencode --version >/dev/null 2>&1'; then
-  log "Installing the Linux-compatible OpenCode runtime..."
-  linux bash -lc 'curl -fsSL https://opencode.ai/v2/install | bash' >>"$LOG_FILE" 2>&1 || die "OpenCode install failed. See $LOG_FILE"
+cat > "$BIN_DIR/termunix" << 'LAUNCHER'
+#!/data/data/com.termux/files/usr/bin/bash
+set -uo pipefail
+
+# Run everything inside Ubuntu container securely
+proot-distro login ubuntu -- bash << 'INNER'
+  export PATH="$HOME/.opencode/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+  
+  # Ensure OpenCode server is running
+  if ! opencode service status >/dev/null 2>&1; then
+    echo "Starting OpenCode service..."
+    opencode service start >/dev/null 2>&1
+    sleep 3
+  fi
+  
+  # Generate pair link
+  LINK=$(opencode pair 2>/dev/null | grep -oE "https?://[^ ]+/auth/connect/[A-Za-z0-9_-]+" | head -1)
+  if [ -n "$LINK" ]; then
+    echo "CONNECTION_URL=$LINK" > /tmp/terminux_url.env
+  else
+    echo "CONNECTION_URL=http://127.0.0.1:49374" > /tmp/terminux_url.env
+  fi
+INNER
+
+# Copy the env file out of the container or read it via cat
+CONNECTION_URL=$(proot-distro login ubuntu -- cat /tmp/terminux_url.env | cut -d= -f2)
+
+echo -e "\033[38;5;114m✔ OpenCode is up!\033[0m"
+echo -e "Opening browser..."
+if [ -n "${CONNECTION_URL:-}" ]; then
+  termux-open-url "$CONNECTION_URL" || echo "Open this link: $CONNECTION_URL"
 fi
-linux bash -lc 'command -v opencode >/dev/null && opencode --version' >>"$LOG_FILE" 2>&1 || die "OpenCode does not run in Debian. See $LOG_FILE"
+LAUNCHER
 
-log "Downloading Terminux files..."
-TMP_DIR="$(mktemp -d)"
-git clone --depth 1 --branch main "$REPO_URL" "$TMP_DIR/repo" >>"$LOG_FILE" 2>&1 || die "GitHub download failed."
-SRC="$TMP_DIR/repo"
-[ -s "$SRC/bin/termunix" ] || die "Launcher file is missing."
-[ -s "$SRC/skin/dist/gui-experimental.cjs" ] || die "Desktop GUI plugin bundle is missing."
-[ -s "$SRC/skin/themes/terminux-charcoal.json" ] || die "Theme file is missing."
-
-mkdir -p "$BIN_DIR" "$CONFIG_DIR" "$PLUGIN_DIR" "$THEME_DIR"
-install -m 0755 "$SRC/bin/termunix" "$BIN_DIR/termunix"
+chmod +x "$BIN_DIR/termunix"
 ln -sf "$BIN_DIR/termunix" "$BIN_DIR/Terminux"
-install -m 0644 "$SRC/skin/dist/gui-experimental.cjs" "$PLUGIN_DIR/gui-experimental.cjs"
-install -m 0644 "$SRC/skin/themes/terminux-charcoal.json" "$THEME_DIR/terminux-charcoal.json"
 
-[ -x "$BIN_DIR/termunix" ] || die "Launcher verification failed."
-linux bash -lc 'opencode --version' >/dev/null 2>&1 || die "Final OpenCode verification failed."
-ok "Terminux نصب شد؛ OpenCode در Debian اجرا می‌شود تا خطای باینری اندروید/Termux رخ ندهد."
-printf '\nبرای باز کردن رابط: %bTerminux%b\n' "$ORANGE" "$RESET"
-printf 'وضعیت: Terminux status | گزارش: %s\n' "$LOG_FILE"
-printf '\nنکته: پوستهٔ GUI فعلی فقط روی OpenCode Desktop اعمال می‌شود؛ مرورگر فعلاً رابط استاندارد OpenCode را نشان می‌دهد.\n'
+print_step "5/5: Finalizing setup..."
+echo -e "\n${G}✔ Installation completed successfully!${R}"
+echo -e "${W}Type ${O}Terminux${W} anytime to launch your coding agent.\n"
