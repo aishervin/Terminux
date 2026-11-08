@@ -141,7 +141,7 @@ case "${1:-connect}" in
   update|upgrade)            update ;;
   uninstall|remove)          uninstall ;;
   help|-h|--help)
-    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
     ;;
   *) bad "دستور ناشناخته: $1"; printf "  %sTerminux help%s\n" "$D" "$R"; exit 1 ;;
 esac

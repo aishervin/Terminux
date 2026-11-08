@@ -8,13 +8,17 @@
 |---|---|
 | `name` / `tagline` / `version` | نام و شعار نمایشی |
 | `themeName` / `themeId` | نام تم در لیست تم‌ها و شناسهٔ یکتا |
-| `logo` | SVG به‌صورت رشته (هر SVG دیگری بگذاری همان استفاده می‌شود) |
+| `logo` | دادهٔ base64 لوگو — از `assets/shen_logo.png` ساخته می‌شود (دستی ویرایش نکن) |
 | `links` | گیت‌هاب / تلگرام / X |
 | `font.family` | خانوادهٔ فونت رابط |
 | `font.stylesheet` | آدرس CSS فونت (خالی = فونت سیستم) |
 | `font.mono` | فونت کد |
 | `colors.dark` / `colors.light` | پالت؛ تم از همین‌ها ساخته می‌شود |
-| `style.*` | خط نئون، گرادیان، انحنا، رنگ انتخاب متن |
+| `applyByDefault` | تم برند خودکار انتخاب شود (پیش‌فرض: `true`) |
+| `behavior.enterToSend` | `false` = Enter خط جدید (پیش‌فرض)، ارسال با Ctrl/Cmd+Enter |
+| `style.*` | خط نئون، گرادیان، انحنا، رنگ انتخاب متن، نشان گوشه |
+
+برای عوض کردن لوگو، `assets/shen_logo.png` را جای‌گذاری کن و `bun run logo` بزن.
 
 ## ۲. تم: `theme.ts`
 
@@ -41,7 +45,7 @@ CSS به‌صورت رشته ساخته و تزریق می‌شود. چیزها�
 ```bash
 cd skin
 bun install
-bun run build:termux
+bun run brand             # logo + build:termux
 ```
 
 خروجی: `skin/dist/gui-experimental.cjs`
@@ -53,6 +57,8 @@ bun run build:termux
 
 ```bash
 cp skin/dist/gui-experimental.cjs ~/.config/opencode/plugins/termunix/
+# یا اگر از گیت‌هاب نصب کرده‌ای:
+Terminux update
 ```
 
 بعد صفحهٔ وب را رفرش کن (Ctrl+Shift+R).

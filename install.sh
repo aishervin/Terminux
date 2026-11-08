@@ -106,7 +106,8 @@ fi
 
 # PATH دائمی برای شل‌های بعدی
 RC="$HOME/.bashrc"
-if [ -f "$RC" ] && ! grep -q 'opencode/bin' "$RC" 2>/dev/null; then
+touch "$RC" 2>/dev/null || true
+if ! grep -q 'opencode/bin' "$RC" 2>/dev/null; then
   printf '\n# Terminux\nexport PATH="$HOME/.opencode/bin:$PATH"\n' >> "$RC"
 fi
 ok "PATH دائمی تنظیم شد."
