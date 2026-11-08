@@ -1,69 +1,63 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# TΞRMINUX™ — Professional One-Line Installer (JSON Theme Edition)
-set -uo pipefail
+# TΞRMINUX™ reliable Termux installer
+set -Eeuo pipefail
 
-O=$'\033[38;5;208m'; G=$'\033[38;5;114m'; W=$'\033[37m'; R=$'\033[0m'; D=$'\033[90m'
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+BIN_DIR="$PREFIX/bin"
+CONFIG_DIR="$HOME/.config/opencode"
+PLUGIN_DIR="$CONFIG_DIR/plugins/termunix"
+THEME_DIR="$CONFIG_DIR/themes"
+REPO="https://github.com/aishervin/Terminux.git"
+TMP_DIR=""
 
-progress() {
-  local p=$1; local label=$2; local w=30
-  local n=$((p*w/100))
-  printf "\r%s[%-*.*s] %3d%% %s%s%s" "$O" "$w" "$n" "##############################" "$p" "$D" "$label" "$R"
-}
+O=$'\033[38;5;208m'; G=$'\033[38;5;114m'; R=$'\033[0m'
+log() { printf "%b[Terminux]%b %s\n" "$O" "$R" "$*"; }
+die() { printf "%b[Terminux] ERROR:%b %s\n" "$O" "$R" "$*" >&2; exit 1; }
+cleanup() { [ -z "$TMP_DIR" ] || rm -rf "$TMP_DIR"; }
+trap cleanup EXIT
 
-clear
-cat << 'BANNER'
-  ████████╗███████╗██████╗ ███╗   ███╗██╗███╗   ██╗██╗   ██╗██╗  ██╗
-  ╚══██╔══╝██╔════╝██╔══██╗████╗ ████║██║████╗  ██║██║   ██║╚██╗██╔╝
-     ██║   █████╗  ██████╔╝██╔████╔██║██║██╔██╗ ██║██║   ██║ ╚███╔╝ 
-     ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║██║██║╚██╗██║██║   ██║ ██╔██╗ 
-     ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║╚██████╔╝██╔╝ ██╗
-     ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝
-     
-     TΞRMINUX™ — Official JSON Theme Edition
-BANNER
+[ -n "${HOME:-}" ] || die "HOME is not set."
+[ -d /data/data/com.termux/files/usr ] || [ "${PREFIX:-}" = "/data/data/com.termux/files/usr" ] || die "Run this installer inside Termux."
+mkdir -p "$BIN_DIR" "$CONFIG_DIR"
 
-printf "\n\n"
-progress 0 "Checking environment..."
-mkdir -p "$PREFIX/bin" 2>/dev/null || PREFIX="$HOME/.local"
-mkdir -p "$PREFIX/bin"
-
-progress 20 "Installing system dependencies..."
-pkg update -y >/dev/null 2>&1 || apt-get update -y >/dev/null 2>&1 || true
-pkg install -y curl git nodejs-lts termux-tools dpkg >/dev/null 2>&1 || apt-get install -y curl git nodejs termux-tools dpkg >/dev/null 2>&1 || true
-
-progress 40 "Verifying OpenCode runtime..."
-if ! command -v opencode >/dev/null 2>&1; then
-  curl -fsSL https://opencode.ai/v2/install | bash >/dev/null 2>&1 || true
+log "Checking dependencies..."
+if command -v pkg >/dev/null 2>&1; then
+  missing=()
+  for cmd in curl git; do command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd"); done
+  [ "${#missing[@]}" -eq 0 ] || pkg install -y "${missing[@]}" || die "Could not install required packages."
+  command -v node >/dev/null 2>&1 || pkg install -y nodejs-lts || die "Node.js installation failed."
+else
+  command -v curl >/dev/null 2>&1 || die "curl is required."
+  command -v git >/dev/null 2>&1 || die "git is required."
 fi
 
-progress 60 "Fetching TΞRMINUX themes & launcher..."
-TMP_DIR=$(mktemp -d)
-git clone --depth 1 https://github.com/aishervin/Terminux.git "$TMP_DIR/src" >/dev/null 2>&1
+export PATH="$HOME/.opencode/bin:$BIN_DIR:$HOME/.local/bin:$PATH"
+if ! command -v opencode >/dev/null 2>&1; then
+  log "Installing OpenCode v2..."
+  curl -fsSL https://opencode.ai/v2/install | bash || die "OpenCode installation failed."
+  export PATH="$HOME/.opencode/bin:$BIN_DIR:$HOME/.local/bin:$PATH"
+fi
+command -v opencode >/dev/null 2>&1 || die "OpenCode binary not found after installation."
+opencode --version >/dev/null 2>&1 || die "OpenCode is installed but cannot execute on this device."
 
-# v0.2.1 - Fix Cache & Typos
-progress 80 "Applying JSON theme and configuration..."
-THEME_DIR="$HOME/.config/opencode/themes"
-mkdir -p "$THEME_DIR"
-cp "$TMP_DIR/src/skin/themes/terminux-charcoal.json" "$THEME_DIR/" 2>/dev/null || true
+log "Downloading Terminux..."
+TMP_DIR="$(mktemp -d)"
+git clone --depth 1 --branch main "$REPO" "$TMP_DIR/repo" >/dev/null 2>&1 || die "GitHub download failed."
+SRC="$TMP_DIR/repo"
+[ -s "$SRC/bin/termunix" ] || die "Launcher file is missing."
+[ -s "$SRC/skin/dist/gui-experimental.cjs" ] || die "Built GUI plugin is missing; installation aborted."
+[ -s "$SRC/skin/themes/terminux-charcoal.json" ] || die "Theme file is missing."
 
-# Set default theme in tui.json / cli.json per official docs
-CONFIG_DIR="$HOME/.config/opencode"
-mkdir -p "$CONFIG_DIR"
-cat > "$CONFIG_DIR/tui.json" <<'JSON'
-{
-  "$schema": "https://opencode.ai/tui.json",
-  "theme": "Terminux Charcoal"
-}
-JSON
+log "Installing GUI plugin, theme and launcher..."
+mkdir -p "$PLUGIN_DIR" "$THEME_DIR"
+install -m 0644 "$SRC/skin/dist/gui-experimental.cjs" "$PLUGIN_DIR/gui-experimental.cjs"
+install -m 0644 "$SRC/skin/themes/terminux-charcoal.json" "$THEME_DIR/terminux-charcoal.json"
+install -m 0755 "$SRC/bin/termunix" "$BIN_DIR/termunix"
+ln -sf "$BIN_DIR/termunix" "$BIN_DIR/Terminux"
 
-cp "$TMP_DIR/src/bin/termunix" "$PREFIX/bin/termunix" 2>/dev/null || cp "$TMP_DIR/src/bin/termunix" "$HOME/.local/bin/termunix"
-chmod +x "$PREFIX/bin/termunix" 2>/dev/null || chmod +x "$HOME/.local/bin/termunix"
-ln -sf "$PREFIX/bin/termunix" "$PREFIX/bin/Terminux" 2>/dev/null || ln -sf "$HOME/.local/bin/termunix" "$HOME/.local/bin/Terminux"
+[ -s "$PLUGIN_DIR/gui-experimental.cjs" ] || die "Plugin installation verification failed."
+[ -x "$BIN_DIR/termunix" ] || die "Launcher installation verification failed."
 
-rm -rf "$TMP_DIR"
-progress 100 "Installation complete!"
-
-echo -e "\n\n${G}✔ TΞRMINUX JSON Theme is ready!${R}"
-echo -e "${W}Type ${O}Terminux${W} to launch your coding agent.\n"
-EOF
+printf "\n%b✓ Terminux installed successfully.%b\n" "$G" "$R"
+printf "Run: Terminux\n"
+printf "Commands: link | status | restart | stop | update | uninstall\n"
