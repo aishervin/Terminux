@@ -86,6 +86,24 @@ button, input, textarea, select, [role="button"] {
 }
 `)
 
+  /* نشان برندِ شناور (فعلاً بدون نیاز به کامپوننت) */
+  const logo = `data:image/svg+xml,${encodeURIComponent(b.logo)}`
+  parts.push(`
+body::after {
+  content: "";
+  position: fixed;
+  inset-inline-end: 12px;
+  bottom: 12px;
+  width: 26px;
+  height: 26px;
+  background: url("${logo}") center / contain no-repeat;
+  opacity: .35;
+  pointer-events: none;
+  z-index: 2147483000;
+  filter: drop-shadow(0 0 6px color-mix(in oklab, ${p} 45%, transparent));
+}
+`)
+
   /* نشان برند — برای استفاده در کامپوننت‌های بعدی */
   parts.push(`
 .termunix-brand {
