@@ -87,22 +87,34 @@ button, input, textarea, select, [role="button"] {
 `)
 
   /* نشان برندِ شناور (فعلاً بدون نیاز به کامپوننت) */
-  const logo = `data:image/svg+xml,${encodeURIComponent(b.logo)}`
+  const logo = b.logo.startsWith("data:")
+    ? b.logo
+    : `data:image/svg+xml,${encodeURIComponent(b.logo)}`
   parts.push(`
 body::after {
   content: "";
   position: fixed;
   inset-inline-end: 12px;
   bottom: 12px;
-  width: 26px;
-  height: 26px;
+  width: ${b.style.badgeSize}px;
+  height: ${b.style.badgeSize}px;
   background: url("${logo}") center / contain no-repeat;
-  opacity: .35;
+  opacity: .4;
   pointer-events: none;
   z-index: 2147483000;
-  filter: drop-shadow(0 0 6px color-mix(in oklab, ${p} 45%, transparent));
+  filter: drop-shadow(0 0 8px color-mix(in oklab, ${p} 40%, transparent));
+}
+
+@media (max-width: 760px) {
+  body::after { width: ${Math.round(b.style.badgeSize * 0.75)}px; height: ${Math.round(b.style.badgeSize * 0.75)}px; inset-inline-end: 8px; bottom: 8px; opacity: .32; }
+  body::before { height: 1.5px; }
 }
 `)
+
+  if (!b.style.badgeOnMobile) {
+    parts.push(`@media (max-width: 760px) { body::after { display: none; } }`)
+  }
+
 
   /* نشان برند — برای استفاده در کامپوننت‌های بعدی */
   parts.push(`

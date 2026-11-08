@@ -15,7 +15,9 @@
     "build": "vite build",
     "dev": "vite build --watch",
     "typecheck": "tsc --noEmit",
-    "build:termux": "bun build src/gui.ts --outfile dist/gui-experimental.cjs --format cjs --target node --external @opencode/plugin/gui"
+    "build:termux": "bun build src/gui.ts --outfile dist/gui-experimental.cjs --format cjs --target node --external @opencode/plugin/gui",
+    "logo": "bun scripts/embed-logo.mjs",
+    "brand": "bun run logo && bun run build:termux"
   },
   "dependencies": {
     "@opencode/plugin": "2.2.6"
