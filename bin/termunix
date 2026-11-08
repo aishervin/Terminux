@@ -1,37 +1,59 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# TΞRMINUX™ launcher (Fixed)
+# TΞRMINUX™ launcher
 set -uo pipefail
 
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-export PATH="$HOME/.opencode/bin:$PREFIX/bin:$PATH"
+export PATH="$HOME/.opencode/bin:$PREFIX/bin:$HOME/.local/bin:$PATH"
 
-say()  { echo -e "\033[38;5;208m>\033[0m $*"; }
-bad()  { echo -e "\033[38;5;203mERR:\033[0m $*"; }
-
-ensure_server() {
-  if ! opencode service status >/dev/null 2>&1; then
-    say "Starting OpenCode server..."
-    opencode service start >/dev/null 2>&1
-    sleep 3
-  fi
+say() { printf '\033[38;5;208m>\033[0m %s\n' "$*"; }
+bad() { printf '\033[38;5;203mERR:\033[0m %s\n' "$*" >&2; }
+have_opencode() {
+  command -v opencode >/dev/null 2>&1 || { bad "OpenCode is not installed. Run the Terminux installer."; return 1; }
+  opencode --version >/dev/null 2>&1 || { bad "OpenCode cannot execute in this Termux environment."; return 1; }
 }
 
-launch() {
-  ensure_server
-  say "Generating connection link..."
-  LINK=$(opencode pair 2>/dev/null | grep -oE 'https?://[^ ]+/auth/connect/[A-Za-z0-9_-]+' | head -1)
-  
-  if [ -n "$LINK" ]; then
-    say "Opening browser..."
-    termux-open-url "$LINK" || xdg-open "$LINK" || echo "Open this link manually: $LINK"
+open_link() {
+  local link
+  have_opencode || return 1
+  if ! opencode service status >/dev/null 2>&1; then
+    say "Starting OpenCode background service..."
+    opencode service start || { bad "Could not start OpenCode service."; return 1; }
+  fi
+
+  say "Generating one-time sign-in link..."
+  link="$(opencode pair 2>&1 | grep -Eo 'https?://[^[:space:]]+/auth/connect/[A-Za-z0-9_-]+' | head -n 1 | tr -d '\r')"
+  [ -n "$link" ] || { bad "No pairing URL returned. Check: opencode service status"; return 1; }
+
+  say "Opening Terminux..."
+  if command -v termux-open-url >/dev/null 2>&1; then
+    termux-open-url "$link" || { printf "Open manually: %s\n" "$link"; return 1; }
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$link" || { printf "Open manually: %s\n" "$link"; return 1; }
   else
-    bad "Failed to generate link. Server might be busy."
+    printf "Open this link manually (valid for 5 minutes):\n%s\n" "$link"
   fi
 }
 
 case "${1:-connect}" in
-  connect|run|start) launch ;;
-  stop)    opencode service stop && echo "Stopped." ;;
-  status)  opencode service status ;;
-  *)       bad "Unknown command: $1" ;;
+  connect|run|start|link) open_link ;;
+  status) have_opencode && opencode service status ;;
+  stop) have_opencode && opencode service stop ;;
+  restart) have_opencode && opencode service restart ;;
+  update)
+    say "Updating Terminux from GitHub..."
+    curl -fsSL https://raw.githubusercontent.com/aishervin/Terminux/main/install.sh | bash
+    ;;
+  uninstall)
+    say "Removing Terminux plugin and launcher; OpenCode sessions are preserved..."
+    rm -rf "$HOME/.config/opencode/plugins/termunix"
+    rm -f "$HOME/.config/opencode/themes/terminux-charcoal.json"
+    rm -f "$PREFIX/bin/termunix" "$PREFIX/bin/Terminux"
+    rm -f "$HOME/.local/bin/termunix" "$HOME/.local/bin/Terminux"
+    say "Terminux removed. OpenCode and its sessions were not deleted."
+    ;;
+  *)
+    bad "Unknown command: $1"
+    printf "Usage: Terminux [connect|link|status|restart|stop|update|uninstall]\n"
+    exit 2
+    ;;
 esac
