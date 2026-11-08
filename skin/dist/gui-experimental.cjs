@@ -51,7 +51,7 @@ var LOGO_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccq
 var brand = {
   name: "TΞRMINUX™",
   themeName: "Terminux Charcoal",
-  themeId: "termunix-charcoal",
+  themeId: "terminux-charcoal",
   tagline: "local coding agent · termux",
   version: "0.2.0",
   logo: LOGO_PNG,
@@ -324,10 +324,10 @@ function applyDefaultTheme(pluginId) {
   try {
     if (!brand.applyByDefault)
       return;
-    const want = `${pluginId}:${brand.themeId}`;
+    const want = brand.themeId;
     const stored = localStorage.getItem(THEME_KEY);
     const initialized = localStorage.getItem(INIT_FLAG) === "1";
-    const mine = !!stored && stored.startsWith(`${pluginId}:`);
+    const mine = stored === want || !!stored && stored.startsWith(`${pluginId}:`);
     localStorage.setItem(INIT_FLAG, "1");
     if (initialized && !mine)
       return;

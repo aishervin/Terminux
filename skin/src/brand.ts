@@ -14,7 +14,7 @@ export const brand = {
   /** نام کوتاه/لاتین برای تم */
   themeName: "Terminux Charcoal",
   /** شناسهٔ تم — فقط حروف کوچک، عدد و خط تیره */
-  themeId: "termunix-charcoal",
+  themeId: "terminux-charcoal",
   tagline: "local coding agent · termux",
   version: "0.2.0",
 

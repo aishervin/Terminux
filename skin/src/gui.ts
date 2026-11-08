@@ -15,10 +15,11 @@ function applyDefaultTheme(pluginId: string) {
   try {
     if (!brand.applyByDefault) return
 
-    const want = `${pluginId}:${brand.themeId}`
+    // تم برند یک تمِ فایلِ کاربر است، پس شناسه اش همان نام فایل است (بدون پیشوند پلاگین).
+    const want = brand.themeId
     const stored = localStorage.getItem(THEME_KEY)
     const initialized = localStorage.getItem(INIT_FLAG) === "1"
-    const mine = !!stored && stored.startsWith(`${pluginId}:`)
+    const mine = stored === want || (!!stored && stored.startsWith(`${pluginId}:`))
 
     localStorage.setItem(INIT_FLAG, "1")
 
