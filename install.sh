@@ -176,21 +176,6 @@ set -uo pipefail
 distro="${TERMINUX_DISTRO:-ubuntu}"
 port="${TERMINUX_PORT:-49374}"
 
-inner() {
-  proot-distro login "$distro" -- bash <<'INNER'
-export PATH="$HOME/.opencode/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
-if ! opencode service status >/dev/null 2>&1; then
-  opencode service start >/dev/null 2>&1
-  sleep 3
-fi
-for i in $(seq 1 20); do
-  opencode service status >/dev/null 2>&1 && break
-  sleep 0.5
-done
-opencode pair 2>/dev/null
-INNER
-}
-
 case "${1:-open}" in
   update)
     echo "Updating TΞRMINUX from GitHub..."
@@ -237,19 +222,53 @@ UNI
     ;;
 esac
 
-out="$(inner)"
-link="$(printf '%s\n' "$out" | grep -oE 'https?://[^ ]+/auth/connect/[A-Za-z0-9_-]+' | tail -1)"
+# ── Default: launch INSIDE Ubuntu and keep that session alive ──
+# The OpenCode service lives inside the Ubuntu (proot) session, so the
+# session must stay open while you use the UI. Ctrl+C here stops it.
+command -v termux-wake-lock >/dev/null 2>&1 && termux-wake-lock
 
-if [ -z "$link" ]; then
-  link="http://127.0.0.1:${port}"
-  echo "Could not create a pair link; trying $link"
-fi
+logf="$(mktemp "${TMPDIR:-/tmp}/terminux.XXXXXX")"
+cleanup() { kill "$watcher" 2>/dev/null; rm -f "$logf"; }
+trap cleanup EXIT
 
-if command -v termux-open-url >/dev/null 2>&1; then
-  termux-open-url "$link" && echo "Opened in browser."
-else
-  echo "Open this link: $link"
+# Watcher (runs in Termux): waits for the pair link, opens the browser once.
+(
+  for _ in $(seq 1 90); do
+    link="$(grep -oE 'https?://[^ ]+/auth/connect/[A-Za-z0-9_-]+' "$logf" 2>/dev/null | tail -1)"
+    if [ -z "$link" ] && grep -q 'TERMINUX_READY' "$logf" 2>/dev/null; then
+      link="http://127.0.0.1:${port}"
+    fi
+    if [ -n "$link" ]; then
+      if command -v termux-open-url >/dev/null 2>&1; then
+        termux-open-url "$link" && echo "Opened in browser."
+      else
+        echo "Open this link: $link"
+      fi
+      exit 0
+    fi
+    sleep 1
+  done
+  echo "Could not get a link. Try: Terminux status"
+) &
+watcher=$!
+
+echo "Entering Ubuntu and launching TΞRMINUX... (Ctrl+C to stop)"
+proot-distro login "$distro" -- bash <<'RUN' 2>&1 | tee "$logf"
+export PATH="$HOME/.opencode/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+trap 'opencode service stop >/dev/null 2>&1; exit 0' INT TERM EXIT
+if ! opencode service status >/dev/null 2>&1; then
+  opencode service start >/dev/null 2>&1
+  sleep 3
 fi
+for i in $(seq 1 20); do
+  opencode service status >/dev/null 2>&1 && break
+  sleep 0.5
+done
+opencode pair 2>/dev/null
+echo "TERMINUX_READY"
+echo "TΞRMINUX is running inside Ubuntu. Keep this window open. Ctrl+C to stop."
+while true; do sleep 3600; done
+RUN
 LAUNCHER
 
 chmod +x "$BIN_DIR/termunix"
