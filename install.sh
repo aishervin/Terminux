@@ -1,8 +1,9 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# TΞRMINUX™ — Bulletproof Zero-to-Hero Installer for Termux
+# TΞRMINUX™ — Connected Edition (Live Link to GitHub Repo)
 set -uo pipefail
 
 O=$'\033[38;5;208m'; G=$'\033[38;5;114m'; W=$'\033[37m'; R=$'\033[0m'; D=$'\033[90m'
+REPO="https://github.com/aishervin/Terminux.git"
 
 print_step() {
   echo -e "\n${O}==> $1${R}"
@@ -17,74 +18,76 @@ cat << 'BANNER'
      ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║╚██████╔╝██╔╝ ██╗
      ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝
      
-     TΞRMINUX™ — Zero-to-Hero Ubuntu Engine on SHΞN™ Strategy 
+     TΞRMINUX™ — GitHub Connected Edition
 BANNER
 
-print_step "1/5: Checking Termux base packages..."
-pkg update -y >/dev/null 2>1 || true
+print_step "1/5: Preparing Termux environment..."
+pkg update -y >/dev/null 2>&1 || true
 pkg install -y proot-distro curl git termux-tools >/dev/null 2>&1
 
-print_step "2/5: Setting up Ubuntu Linux container (Proot)..."
+print_step "2/5: Synchronizing Ubuntu Container..."
 if ! proot-distro list | grep -q "ubuntu.*installed"; then
-  echo "Installing Ubuntu container (this may take a minute)..."
   proot-distro install ubuntu
-else
-  echo "Ubuntu container already installed."
 fi
 
-print_step "3/5: Installing OpenCode and dependencies inside Ubuntu..."
-# We use a heredoc to run multiple commands inside the container
-proot-distro login ubuntu -- bash << 'INSIDE'
+print_step "3/5: Connecting to aishervin/Terminux repository..."
+proot-distro login ubuntu -- bash << INSIDE
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -y >/dev/null 2>&1
-  apt-get install -y curl git nodejs npm build-essential >/dev/null 2>&1
+  apt-get install -y curl git nodejs npm >/dev/null 2>&1
   
+  # Clone or Update the repo inside Ubuntu
+  if [ ! -d "~/Terminux" ]; then
+    git clone $REPO ~/Terminux
+  else
+    cd ~/Terminux && git pull origin main
+  fi
+
+  # Install OpenCode if missing
   if ! command -v opencode >/dev/null 2>&1; then
     curl -fsSL https://opencode.ai/v2/install | bash
   fi
+
+  # LINK YOUR REPO CONTENT TO OPENCODE
+  mkdir -p ~/.config/opencode/skills
+  mkdir -p ~/.config/opencode/plugins
+  
+  # Link skills from your repo to OpenCode skills folder
+  if [ -d "~/Terminux/skills" ]; then
+    ln -sf ~/Terminux/skills/* ~/.config/opencode/skills/
+  fi
 INSIDE
 
-print_step "4/5: Installing TΞRMINUX launcher into Termux..."
+print_step "4/5: Installing Smart Launcher..."
 BIN_DIR="${PREFIX:-/data/data/com.termux/files/usr}/bin"
-mkdir -p "$BIN_DIR"
-
 cat > "$BIN_DIR/termunix" << 'LAUNCHER'
 #!/data/data/com.termux/files/usr/bin/bash
 set -uo pipefail
 
-# Run everything inside Ubuntu container securely
+if [ "${1:-}" == "update" ]; then
+  echo "Updating TΞRMINUX from GitHub..."
+  proot-distro login ubuntu -- bash -c "cd ~/Terminux && git pull origin main"
+  echo "Update complete."
+  exit 0
+fi
+
 proot-distro login ubuntu -- bash << 'INNER'
   export PATH="$HOME/.opencode/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
-  
-  # Ensure OpenCode server is running
   if ! opencode service status >/dev/null 2>&1; then
-    echo "Starting OpenCode service..."
     opencode service start >/dev/null 2>&1
     sleep 3
   fi
-  
-  # Generate pair link
   LINK=$(opencode pair 2>/dev/null | grep -oE "https?://[^ ]+/auth/connect/[A-Za-z0-9_-]+" | head -1)
-  if [ -n "$LINK" ]; then
-    echo "CONNECTION_URL=$LINK" > /tmp/terminux_url.env
-  else
-    echo "CONNECTION_URL=http://127.0.0.1:49374" > /tmp/terminux_url.env
-  fi
+  echo "CONNECTION_URL=${LINK:-http://127.0.0.1:49374}" > /tmp/terminux_url.env
 INNER
 
-# Copy the env file out of the container or read it via cat
 CONNECTION_URL=$(proot-distro login ubuntu -- cat /tmp/terminux_url.env | cut -d= -f2)
-
-echo -e "\033[38;5;114m✔ OpenCode is up!\033[0m"
-echo -e "Opening browser..."
-if [ -n "${CONNECTION_URL:-}" ]; then
-  termux-open-url "$CONNECTION_URL" || echo "Open this link: $CONNECTION_URL"
-fi
+termux-open-url "$CONNECTION_URL" || echo "Link: $CONNECTION_URL"
 LAUNCHER
 
 chmod +x "$BIN_DIR/termunix"
 ln -sf "$BIN_DIR/termunix" "$BIN_DIR/Terminux"
 
-print_step "5/5: Finalizing setup..."
-echo -e "\n${G}✔ Installation completed successfully!${R}"
-echo -e "${W}Type ${O}Terminux${W} anytime to launch your coding agent.\n"
+print_step "5/5: Ready!"
+echo -e "\n${G}✔ Now connected to GitHub: aishervin/Terminux${R}"
+echo -e "To update skills later, just type: ${O}Terminux update${R}\n"
