@@ -1,147 +1,37 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# ─────────────────────────────────────────────────────────────
-#  TΞRMINUX™ launcher
-#  Terminux            → سرور را بالا می‌آورد و UI را در مرورگر باز می‌کند
-#  Terminux run        → همان
-#  Terminux link       → فقط لینک اتصال را چاپ می‌کند
-#  Terminux status     → وضعیت سرور و پوست
-#  Terminux stop       → توقف سرور
-#  Terminux update     → به‌روزرسانی پوست
-#  Terminux uninstall  → حذف پوست و دستورها
-# ─────────────────────────────────────────────────────────────
+# TΞRMINUX™ launcher (Fixed)
 set -uo pipefail
 
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-HOME="${HOME:-/data/data/com.termux/files/home}"
 export PATH="$HOME/.opencode/bin:$PREFIX/bin:$PATH"
 
-SRC_DIR="${TERMINUX_SRC:-$HOME/.termunix/src}"
-PLUGIN_DIR="${TERMINUX_PLUGIN:-$HOME/.config/opencode/plugins/termunix}"
-REPO="${TERMINUX_REPO:-https://github.com/aishervin/Terminux.git}"
-BRANCH="${TERMINUX_BRANCH:-main}"
+say()  { echo -e "\033[38;5;208m>\033[0m $*"; }
+bad()  { echo -e "\033[38;5;203mERR:\033[0m $*"; }
 
-O=$'\033[38;5;208m'; G=$'\033[38;5;114m'; E=$'\033[38;5;203m'
-D=$'\033[90m'; B=$'\033[1m'; R=$'\033[0m'
-
-say()  { printf "%s▸%s %s\n" "$O" "$R" "$*"; }
-ok()   { printf "%s✓%s %s\n" "$G" "$R" "$*"; }
-bad()  { printf "%s✕%s %s\n" "$E" "$R" "$*"; }
-
-need() {
-  command -v opencode >/dev/null 2>&1 || {
-    bad "OpenCode نصب نیست. اول نصب‌کننده را اجرا کن:"
-    printf "  %scurl -fsSL https://raw.githubusercontent.com/aishervin/Terminux/main/install.sh | bash%s\n" "$D" "$R"
-    exit 1
-  }
+ensure_server() {
+  if ! opencode service status >/dev/null 2>&1; then
+    say "Starting OpenCode server..."
+    opencode service start >/dev/null 2>&1
+    sleep 3
+  fi
 }
 
-healthy() { opencode api get /api/info >/dev/null 2>&1; }
-
-ensure_up() {
-  need
-  healthy && return 0
-  say "راه‌اندازی سرور…"
-  opencode service start >/dev/null 2>&1 || true
-  local i
-  for i in $(seq 1 60); do
-    healthy && { ok "سرور آماده است."; return 0; }
-    sleep 0.25
-  done
-  bad "سرور بالا نیامد. لاگ: ~/.local/share/opencode/log/opencode.log"
-  exit 1
-}
-
-pair_link() {
-  opencode pair 2>/dev/null \
-    | grep -oE 'https?://[^ ]+/auth/connect/[A-Za-z0-9_-]+' \
-    | head -1
-}
-
-open_link() {
-  local link="$1"
-  if command -v termux-open-url >/dev/null 2>&1; then
-    termux-open-url "$link" >/dev/null 2>&1 && return 0
-  fi
-  if command -v am >/dev/null 2>&1; then
-    am start -a android.intent.action.VIEW -d "$link" >/dev/null 2>&1 && return 0
-  fi
-  return 1
-}
-
-connect() {
-  ensure_up
-  local link
-  link="$(pair_link)"
-  if [ -z "$link" ]; then
-    bad "ساخت لینک اتصال ناموفق بود."
-    exit 1
-  fi
-  if [ "${1:-}" = "--print" ]; then
-    printf "%s\n" "$link"
-    return 0
-  fi
-  if open_link "$link"; then
-    ok "UI در مرورگر باز شد."
+launch() {
+  ensure_server
+  say "Generating connection link..."
+  LINK=$(opencode pair 2>/dev/null | grep -oE 'https?://[^ ]+/auth/connect/[A-Za-z0-9_-]+' | head -1)
+  
+  if [ -n "$LINK" ]; then
+    say "Opening browser..."
+    termux-open-url "$LINK" || xdg-open "$LINK" || echo "Open this link manually: $LINK"
   else
-    say "مرورگر پیدا نشد. این لینک را دستی باز کن:"
-    printf "\n  %s%s%s\n\n" "$B" "$link" "$R"
+    bad "Failed to generate link. Server might be busy."
   fi
-}
-
-status() {
-  need
-  printf "  %sOpenCode:%s %s\n" "$D" "$R" "$(opencode --version 2>/dev/null | head -1)"
-  if healthy; then
-    ok "سرور فعال است."
-  else
-    bad "سرور خاموش است (Terminux را بزن)."
-  fi
-  local url; url="$(opencode service status 2>/dev/null | head -1)"
-  [ -n "$url" ] && printf "  %sآدرس:%s %s\n" "$D" "$R" "$url"
-  if opencode api get /api/plugin 2>/dev/null | grep -q 'opencode-termunix-skin'; then
-    ok "پوست TΞRMINUX فعال است."
-  else
-    bad "پوست فعال نیست (Terminux update)."
-  fi
-}
-
-update() {
-  need
-  [ -d "$SRC_DIR/.git" ] || { bad "سورس پیدا نشد: $SRC_DIR"; exit 1; }
-  say "به‌روزرسانی…"
-  git -C "$SRC_DIR" fetch --depth 1 origin "$BRANCH" >/dev/null 2>&1 \
-    && git -C "$SRC_DIR" reset --hard "origin/$BRANCH" >/dev/null 2>&1 \
-    || { bad "به‌روزرسانی مخزن ناموفق بود."; exit 1; }
-  local dist="$SRC_DIR/skin/dist/gui-experimental.cjs"
-  [ -f "$dist" ] || { bad "باندل پوست پیدا نشد."; exit 1; }
-  mkdir -p "$PLUGIN_DIR"
-  cp "$dist" "$PLUGIN_DIR/gui-experimental.cjs"
-  [ -f "$SRC_DIR/bin/termunix" ] && cp "$SRC_DIR/bin/termunix" "$PREFIX/bin/termunix" && chmod +x "$PREFIX/bin/termunix"
-  ok "پوست به‌روز شد."
-  opencode service restart >/dev/null 2>&1 || opencode service start >/dev/null 2>&1 || true
-  ok "سرور دوباره راه افتاد. صفحه را رفرش کن."
-}
-
-uninstall() {
-  say "حذف پوست و دستورها…"
-  rm -rf "$PLUGIN_DIR"
-  rm -rf "$SRC_DIR"
-  rm -f "$PREFIX/bin/termunix" "$PREFIX/bin/Terminux"
-  rm -f "$HOME/.termux/boot/termunix" 2>/dev/null || true
-  opencode service restart >/dev/null 2>&1 || true
-  ok "حذف شد. (OpenCode و سشن‌ها دست‌نخورده ماندند.)"
 }
 
 case "${1:-connect}" in
-  ""|connect|run|open|start) connect "${2:-}" ;;
-  link|--print|url)          connect --print ;;
-  status|info)               status ;;
-  stop)                      need; opencode service stop >/dev/null 2>&1 && ok "سرور متوقف شد." ;;
-  restart)                   need; opencode service restart >/dev/null 2>&1 && ok "سرور راه‌اندازی شد." ;;
-  update|upgrade)            update ;;
-  uninstall|remove)          uninstall ;;
-  help|-h|--help)
-    sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
-    ;;
-  *) bad "دستور ناشناخته: $1"; printf "  %sTerminux help%s\n" "$D" "$R"; exit 1 ;;
+  connect|run|start) launch ;;
+  stop)    opencode service stop && echo "Stopped." ;;
+  status)  opencode service status ;;
+  *)       bad "Unknown command: $1" ;;
 esac
