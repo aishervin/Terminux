@@ -41,6 +41,7 @@ progress 60 "Fetching TΞRMINUX themes & launcher..."
 TMP_DIR=$(mktemp -d)
 git clone --depth 1 https://github.com/aishervin/Terminux.git "$TMP_DIR/src" >/dev/null 2>&1
 
+# v0.2.1 - Fix Cache & Typos
 progress 80 "Applying JSON theme and configuration..."
 THEME_DIR="$HOME/.config/opencode/themes"
 mkdir -p "$THEME_DIR"
