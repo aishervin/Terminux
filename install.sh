@@ -44,7 +44,7 @@ git clone --depth 1 https://github.com/aishervin/Terminux.git "$TMP_DIR/src" >/d
 progress 80 "Applying JSON theme and configuration..."
 THEME_DIR="$HOME/.config/opencode/themes"
 mkdir -p "$THEME_DIR"
-cp "$TMP_DIR/src/skin/themes/terminux-charcoal.json" "$THEMED_DIR" 2>/dev/null || cp "$TMP_DIR/src/skin/themes/terminux-charcoal.json" "$THEME_DIR/"
+cp "$TMP_DIR/src/skin/themes/terminux-charcoal.json" "$THEME_DIR/" 2>/dev/null || true
 
 # Set default theme in tui.json / cli.json per official docs
 CONFIG_DIR="$HOME/.config/opencode"
