@@ -17,7 +17,7 @@ cleanup() { [ -z "$TMP_DIR" ] || rm -rf "$TMP_DIR"; }
 trap cleanup EXIT
 
 [ -n "${HOME:-}" ] || die "HOME is not set."
-[ -d /data/data/com.termux/files/usr ] || [ "${PREFIX:-}" = "/data/data/com.termux/files/usr" ] || die "Run this installer inside Termux."
+if [ -z "${TERMUX_VERSION:-}" ] && [ ! -d /data/data/com.termux/files/usr ]; then die "Run this installer inside Termux."; fi
 mkdir -p "$BIN_DIR" "$CONFIG_DIR"
 
 log "Checking dependencies..."
@@ -25,7 +25,6 @@ if command -v pkg >/dev/null 2>&1; then
   missing=()
   for cmd in curl git; do command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd"); done
   [ "${#missing[@]}" -eq 0 ] || pkg install -y "${missing[@]}" || die "Could not install required packages."
-  command -v node >/dev/null 2>&1 || pkg install -y nodejs-lts || die "Node.js installation failed."
 else
   command -v curl >/dev/null 2>&1 || die "curl is required."
   command -v git >/dev/null 2>&1 || die "git is required."
