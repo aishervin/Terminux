@@ -319,7 +319,7 @@ function buildTheme(b = brand) {
 
 // src/gui.ts
 var THEME_KEY = "opencode-theme-id";
-var INIT_FLAG = "termunix.theme.initialized";
+var INIT_FLAG = "termunix.theme.v2";
 function applyDefaultTheme(pluginId) {
   try {
     if (!brand.applyByDefault)

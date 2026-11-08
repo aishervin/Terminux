@@ -4,7 +4,7 @@ import { buildCss } from "./styles"
 import { buildTheme } from "./theme"
 
 const THEME_KEY = "opencode-theme-id"
-const INIT_FLAG = "termunix.theme.initialized"
+const INIT_FLAG = "termunix.theme.v2"
 
 /**
  * تم برند را یک‌بار به‌صورت پیش‌فرض انتخاب می‌کند.

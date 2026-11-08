@@ -83,6 +83,21 @@ if [ -f "$HOME/Terminux/skin/dist/gui-experimental.cjs" ]; then
     > "$HOME/.config/opencode/plugins/termunix/package.json"
 fi
 
+# branded colour theme (file-based theme: the id is the file name)
+if [ -f "$HOME/Terminux/skin/themes/terminux-charcoal.json" ]; then
+  mkdir -p "$HOME/.config/opencode/themes"
+  cp "$HOME/Terminux/skin/themes/terminux-charcoal.json" "$HOME/.config/opencode/themes/"
+fi
+CLI_CFG="$HOME/.config/opencode/cli.json"
+node -e '
+const fs=require("fs");
+const p=process.argv[1];
+let j={};
+try { j=JSON.parse(fs.readFileSync(p,"utf8")) } catch(e) { j={} }
+j.theme = Object.assign({}, j.theme, { name: "terminux-charcoal" });
+fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
+' "$CLI_CFG" || true
+
 # skills from this repo, via the official skills config
 mkdir -p "$HOME/.config/opencode"
 CFG="$HOME/.config/opencode/opencode.json"
@@ -145,6 +160,18 @@ case "${1:-open}" in
         mkdir -p "$HOME/.config/opencode/plugins/termunix"
         cp "$HOME/Terminux/skin/dist/gui-experimental.cjs" "$HOME/.config/opencode/plugins/termunix/"
       fi
+      if [ -f "$HOME/Terminux/skin/themes/terminux-charcoal.json" ]; then
+        mkdir -p "$HOME/.config/opencode/themes"
+        cp "$HOME/Terminux/skin/themes/terminux-charcoal.json" "$HOME/.config/opencode/themes/"
+      fi
+      node -e '
+      const fs=require("fs");
+      const p=process.env.HOME+"/.config/opencode/cli.json";
+      let j={};
+      try { j=JSON.parse(fs.readFileSync(p,"utf8")) } catch(e) { j={} }
+      j.theme = Object.assign({}, j.theme, { name: "terminux-charcoal" });
+      fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
+      ' || true
       opencode service restart >/dev/null 2>&1 || true
     '
     echo "Done. Refresh the browser tab."
