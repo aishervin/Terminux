@@ -1,101 +1,252 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# TΞRMINUX™ launcher — OpenCode runs in Debian proot, never as an Android ELF.
-set -Eeuo pipefail
+# TΞRMINUX™ launcher — keeps the OpenCode background service awake.
+#
+# OpenCode runs inside an Ubuntu proot container. proot-distro starts that
+# container with --kill-on-exit, so the service dies with the last proot
+# session. This launcher keeps one small detached "keeper" session alive: it
+# holds the container open and restarts the service whenever it is not healthy.
+# Closing the Termux window therefore no longer stops the service; only
+# `Terminux stop` does.
+set -uo pipefail
 
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-DISTRO="debian"
+DISTRO="${TERMINUX_DISTRO:-ubuntu}"
 PORT="${TERMINUX_PORT:-49374}"
-LOG_DIR="$HOME/.termunix"
-LOG_FILE="$LOG_DIR/opencode.log"
-mkdir -p "$LOG_DIR"
+THOME="${HOME:-/data/data/com.termux/files/home}"
+STATE_DIR="$THOME/.termunix"
+KEEPER_PID="$STATE_DIR/keeper.pid"
+KEEPER_LOG="$STATE_DIR/opencode.log"
+BOOT_LOG="$STATE_DIR/boot.log"
+KEEPER_TAG="TERMINUX_KEEPER=1"
+REPO_RAW="https://raw.githubusercontent.com/aishervin/Terminux/main"
 export PATH="$PREFIX/bin:$PATH"
+
+# Command prefix used inside Ubuntu.
+OC_ENV='export PATH="$HOME/.opencode/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"'
 
 say(){ printf '\033[38;5;208m[Terminux]\033[0m %s\n' "$*"; }
 bad(){ printf '\033[38;5;203m[Terminux ERROR]\033[0m %s\n' "$*" >&2; }
-need(){
-  command -v proot-distro >/dev/null 2>&1 || { bad "Debian runtime missing. Re-run the Terminux installer."; exit 1; }
-  proot-distro list 2>/dev/null | grep -Eq '(^|[[:space:]])debian([[:space:]]|$)' || { bad "Debian is not installed. Re-run the installer."; exit 1; }
-}
-linux(){ proot-distro login "$DISTRO" --shared-tmp -- "$@"; }
-oc(){ linux bash -lc 'export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"; exec opencode "$@"' _ "$@"; }
 
-health(){
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsS --max-time 2 "http://127.0.0.1:$PORT/global/health" >/dev/null 2>&1
+usage(){
+  cat <<'EOF'
+Usage: Terminux [command]
+
+  (none) | start      start the service and open the UI (keeps it awake)
+  status              version, service health, keeper and proxy state
+  stop                stop the keeper, the service and the local proxies
+  restart             stop then start
+  logs [n]            tail the keeper log (default 100 lines)
+  update              pull the latest Terminux from GitHub (sessions kept)
+  upgrade             upgrade OpenCode itself (sessions kept)
+  bridge [args]       manage the Termux WebView bridge
+  proxies [start|stop|status]
+  uninstall           remove the Terminux files (sessions kept)
+EOF
+}
+
+# --no-open is used by Termux:Boot so a reboot does not hijack the screen.
+NO_OPEN=0
+ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --no-open) NO_OPEN=1 ;;
+    *) ARGS+=("$arg") ;;
+  esac
+done
+if [ "${#ARGS[@]}" -gt 0 ]; then set -- "${ARGS[@]}"; else set --; fi
+
+need(){
+  command -v proot-distro >/dev/null 2>&1 \
+    || { bad "proot-distro is missing. Re-run the Terminux installer."; exit 1; }
+  proot-distro list 2>/dev/null | grep -Eq "(^|[[:space:]])${DISTRO}([[:space:]]|$)" \
+    || { bad "Ubuntu (${DISTRO}) is not installed. Re-run the Terminux installer."; exit 1; }
+}
+
+inside(){ proot-distro login "$DISTRO" --shared-tmp -- "$@"; }
+shellin(){ proot-distro login "$DISTRO" --shared-tmp -- bash -lc "$1"; }
+service_ok(){ shellin "$OC_ENV; opencode service status >/dev/null 2>&1"; }
+
+pgrep_f(){
+  if command -v pgrep >/dev/null 2>&1; then
+    pgrep -f "$1" 2>/dev/null
   else
-    return 1
+    ps -ef 2>/dev/null | grep -F "$1" | grep -v grep | awk '{print $2}'
   fi
 }
 
-start_service(){
-  if health; then return 0; fi
-  say "Starting the local OpenCode service on 127.0.0.1:$PORT ..."
-  oc service start >>"$LOG_FILE" 2>&1 || {
-    # Some OpenCode releases expose serve directly rather than the service manager.
-    (nohup proot-distro login "$DISTRO" --shared-tmp -- bash -lc 'export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"; exec opencode serve --hostname 127.0.0.1 --port '"$PORT" >>"$LOG_FILE" 2>&1 </dev/null &)
-  }
-  for _ in $(seq 1 25); do
-    health && { say "Service is ready."; return 0; }
+keeper_alive(){
+  local pid
+  pid="$(cat "$KEEPER_PID" 2>/dev/null || true)"
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then return 0; fi
+  [ -n "$(pgrep_f "$KEEPER_TAG")" ]
+}
+
+start_keeper(){
+  need
+  mkdir -p "$STATE_DIR"
+  if keeper_alive; then
+    say "Keep-alive session is already running."
+    return 0
+  fi
+
+  local script
+  script="$(cat <<'KEEPER'
+export PATH="$HOME/.opencode/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+export TERMINUX_KEEPER=1
+log(){ printf '[keeper %s] %s\n' "$(date +%H:%M:%S)" "$*"; }
+log "online (pid $$)"
+if [ -x "$HOME/.config/terminux-proxies.sh" ]; then
+  bash "$HOME/.config/terminux-proxies.sh" start >/dev/null 2>&1 || true
+fi
+while :; do
+  if ! opencode service status >/dev/null 2>&1; then
+    log "service is down, starting it"
+    opencode service start >/dev/null 2>&1 || true
+    sleep 3
+    if opencode service status >/dev/null 2>&1; then log "service is back up"; fi
+  fi
+  sleep 15
+done
+KEEPER
+)"
+
+  if command -v termux-wake-lock >/dev/null 2>&1; then termux-wake-lock >/dev/null 2>&1 || true; fi
+  say "Starting the keep-alive session on 127.0.0.1:$PORT ..."
+  if command -v setsid >/dev/null 2>&1; then
+    setsid nohup proot-distro login "$DISTRO" --shared-tmp -- bash -lc "$script" >>"$KEEPER_LOG" 2>&1 </dev/null &
+  else
+    nohup proot-distro login "$DISTRO" --shared-tmp -- bash -lc "$script" >>"$KEEPER_LOG" 2>&1 </dev/null &
+  fi
+  echo $! >"$KEEPER_PID"
+
+  local i
+  for i in $(seq 1 40); do
+    if service_ok; then
+      say "OpenCode is up and will stay awake after this window closes."
+      return 0
+    fi
     sleep 1
   done
-  bad "OpenCode did not become healthy. Log: $LOG_FILE"
+  bad "OpenCode did not become healthy. Log: $KEEPER_LOG"
   return 1
 }
 
-need
-case "${1:-connect}" in
-  connect|run|start|link)
-    command -v curl >/dev/null 2>&1 || { bad "curl missing; run the installer."; exit 1; }
-    start_service
-    say "Creating a secure pairing link..."
-    PAIR_OUTPUT="$(oc pair 2>&1 || true)"
-    LINK="$(printf '%s\n' "$PAIR_OUTPUT" | grep -Eo 'https?://[^[:space:]]+/auth/connect/[A-Za-z0-9_-]+' | head -n 1 | tr -d '\r' || true)"
-    if [ -z "$LINK" ]; then
-      printf '%s\n' "$PAIR_OUTPUT"
-      bad "Pairing URL not detected. Check $LOG_FILE"
-      exit 1
-    fi
-    say "Opening Terminux in your browser..."
-    if command -v termux-open-url >/dev/null 2>&1; then
-      termux-open-url "$LINK" || { printf 'Open manually: %s\n' "$LINK"; exit 1; }
-    else
-      printf 'Open this link manually:\n%s\n' "$LINK"
-    fi
-    ;;
-  status)
-    need
-    if health; then
-      say "OpenCode is healthy at http://127.0.0.1:$PORT"
-    else
-      say "OpenCode is stopped or not responding."
-      exit 1
-    fi
-    ;;
-  stop)
-    need
-    oc service stop || true
+stop_keeper(){
+  local pids p
+  pids="$(pgrep_f "$KEEPER_TAG")"
+  if [ -f "$KEEPER_PID" ]; then
+    pids="$pids $(cat "$KEEPER_PID" 2>/dev/null || true)"
+  fi
+  pids="$(printf '%s\n' $pids | sort -u)"
+  for p in $pids; do kill -TERM "$p" 2>/dev/null || true; done
+  if [ -n "$(printf '%s' "$pids" | tr -d '[:space:]')" ]; then
+    sleep 2
+    for p in $pids; do kill -KILL "$p" 2>/dev/null || true; done
+  fi
+  rm -f "$KEEPER_PID"
+}
+
+pair_link(){
+  local out link
+  out="$(shellin "$OC_ENV; opencode pair 2>&1" || true)"
+  link="$(printf '%s\n' "$out" | grep -Eo 'https?://[^[:space:]]+/auth/connect/[A-Za-z0-9_-]+' | head -n 1 | tr -d '\r')"
+  [ -n "$link" ] || link="http://127.0.0.1:$PORT"
+  printf '%s\n' "$link"
+}
+
+open_ui(){
+  local link="$1"
+  if [ "$NO_OPEN" -eq 1 ]; then
+    printf '%s\n' "$link"
+    return 0
+  fi
+  if command -v termux-open-url >/dev/null 2>&1; then
+    termux-open-url "$link" >/dev/null 2>&1 || printf 'Open manually: %s\n' "$link"
+  else
+    printf 'Open this link in your browser:\n%s\n' "$link"
+  fi
+}
+
+cmd_connect(){
+  start_keeper || exit 1
+  say "Creating a pairing link..."
+  open_ui "$(pair_link)"
+}
+
+cmd_status(){
+  need
+  if keeper_alive; then say "Keeper: running"; else say "Keeper: stopped (run: Terminux)"; fi
+  if service_ok; then
+    say "OpenCode: healthy at http://127.0.0.1:$PORT"
+  else
+    say "OpenCode: not responding"
+  fi
+  shellin "$OC_ENV; opencode --version; echo '--- service ---'; opencode service status; echo '--- proxies ---'; if [ -x \"\$HOME/.config/terminux-proxies.sh\" ]; then bash \"\$HOME/.config/terminux-proxies.sh\" status; else echo 'not configured'; fi; true"
+}
+
+cmd_stop(){
+  stop_keeper
+  need
+  shellin "$OC_ENV; if [ -x \"\$HOME/.config/terminux-proxies.sh\" ]; then bash \"\$HOME/.config/terminux-proxies.sh\" stop >/dev/null 2>&1 || true; fi; opencode service stop >/dev/null 2>&1 || true; true"
+  if command -v pkill >/dev/null 2>&1; then
     pkill -f "opencode serve --hostname 127.0.0.1 --port $PORT" 2>/dev/null || true
-    say "Stop requested."
-    ;;
-  restart)
-    "$0" stop || true
-    "$0" start
-    ;;
-  logs)
-    tail -n 100 "$LOG_FILE"
-    ;;
-  update)
-    curl -fsSL https://raw.githubusercontent.com/aishervin/Terminux/main/install.sh | bash
-    ;;
-  uninstall)
-    say "Removing Terminux files only; Debian and OpenCode data/sessions are preserved."
-    rm -rf "$HOME/.config/opencode/plugins/termunix"
-    rm -f "$HOME/.config/opencode/themes/terminux-charcoal.json"
-    rm -f "$PREFIX/bin/termunix" "$PREFIX/bin/Terminux"
-    say "Terminux launcher and skin removed. Runtime and sessions were not deleted."
-    ;;
-  *)
-    bad "Usage: Terminux [connect|link|status|restart|stop|logs|update|uninstall]"
-    exit 2
-    ;;
+  fi
+  say "Stopped. Run 'Terminux' to start it again."
+}
+
+cmd_logs(){
+  local n="${1:-100}"
+  if [ -f "$KEEPER_LOG" ]; then tail -n "$n" "$KEEPER_LOG"; else say "No keeper log yet."; fi
+}
+
+cmd_update(){
+  say "Updating TΞRMINUX from GitHub (sessions and settings are kept)..."
+  command -v curl >/dev/null 2>&1 || { bad "curl is missing: pkg install curl"; exit 1; }
+  curl -fsSL "$REPO_RAW/install.sh?ts=$(date +%s)" | bash || { bad "Update failed."; exit 1; }
+  say "Update finished."
+}
+
+cmd_upgrade(){
+  need
+  say "Stopping the service before upgrading OpenCode..."
+  stop_keeper
+  shellin "$OC_ENV; opencode service stop >/dev/null 2>&1 || true; opencode upgrade --method curl; opencode --version; true"
+  say "Starting the service again..."
+  start_keeper || true
+}
+
+cmd_bridge(){
+  if [ -x "$PREFIX/bin/terminux-bridge" ]; then
+    exec "$PREFIX/bin/terminux-bridge" "$@"
+  fi
+  inside bash -lc 'exec "$HOME/.config/terminux-bridge/terminux-bridge" "$@"' _ "$@"
+}
+
+cmd_proxies(){
+  inside bash -lc 'if [ -x "$HOME/.config/terminux-proxies.sh" ]; then exec bash "$HOME/.config/terminux-proxies.sh" "$@"; fi; echo "proxies script not installed" >&2; exit 1' _ "${1:-status}"
+}
+
+cmd_uninstall(){
+  say "Removing Terminux files only; Ubuntu, sessions and settings are preserved."
+  stop_keeper
+  need
+  shellin 'opencode service stop >/dev/null 2>&1 || true; rm -rf "$HOME/Terminux" "$HOME/.config/opencode/plugins/termunix"; rm -f "$HOME/.terminux-apply.sh" "$HOME/.terminux.conf"; true'
+  rm -f "$PREFIX/bin/termunix" "$PREFIX/bin/Terminux" "$THOME/.termux/boot/90-terminux"
+  rm -rf "$STATE_DIR"
+  say "Removed. The Ubuntu container was kept."
+}
+
+case "${1:-start}" in
+  start|connect|run|link|open) cmd_connect ;;
+  status|st) cmd_status ;;
+  stop) cmd_stop ;;
+  restart) cmd_stop; sleep 1; cmd_connect ;;
+  logs) shift; cmd_logs "${1:-100}" ;;
+  update) cmd_update ;;
+  upgrade) cmd_upgrade ;;
+  uninstall) cmd_uninstall ;;
+  bridge) shift; cmd_bridge "$@" ;;
+  proxies) shift; cmd_proxies "$@" ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 2 ;;
 esac

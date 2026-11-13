@@ -27,5 +27,15 @@ jobs:
           grep -q 'Terminux uninstall' README.md
           test -s skin/dist/gui-experimental.cjs
           test -s skin/themes/terminux-charcoal.json
+      - name: Launcher has a single source of truth
+        run: |
+          # install.sh must install bin/termunix, never an inline copy.
+          grep -q 'Terminux/bin/termunix' install.sh
+          ! grep -q 'cat > "\$BIN_DIR/termunix"' install.sh
+      - name: Keep-alive guarantees
+        run: |
+          grep -q 'TERMINUX_KEEPER' bin/termunix
+          grep -q 'opencode service status' bin/termunix
+          grep -q '90-terminux' install.sh
       - name: Check patch whitespace
         run: git diff --check
